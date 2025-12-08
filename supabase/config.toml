@@ -1,0 +1,13 @@
+project_id = "pcthrcveibarubbueyfj"
+
+[functions.ingest]
+verify_jwt = false
+
+[functions.insights]
+verify_jwt = false
+
+[functions.jobs]
+verify_jwt = false
+
+[functions.events]
+verify_jwt = false
