@@ -7,17 +7,19 @@ import { PipelineFlow } from "@/components/dashboard/PipelineFlow";
 import { SentimentChart } from "@/components/dashboard/SentimentChart";
 import { EventStream } from "@/components/dashboard/EventStream";
 import { APIReference } from "@/components/dashboard/APIReference";
+import { useDashboardStats } from "@/hooks/useDashboardData";
 import { 
   Inbox, 
   TrendingUp, 
-  Database, 
-  Clock,
+  CheckCircle,
+  AlertCircle,
   Cpu,
   HardDrive
 } from "lucide-react";
 
 const Index = () => {
   const [activeSection, setActiveSection] = useState("dashboard");
+  const { stats, loading } = useDashboardStats();
 
   return (
     <div className="min-h-screen bg-background">
@@ -39,31 +41,29 @@ const Index = () => {
           {/* Stats Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             <StatsCard
-              title="Active Jobs"
-              value="24"
-              change={{ value: 12, trend: "up" }}
+              title="Total Jobs"
+              value={loading ? "..." : stats.totalJobs.toString()}
               icon={Inbox}
               delay={0}
             />
             <StatsCard
-              title="Processed Today"
-              value="12,847"
-              change={{ value: 8, trend: "up" }}
-              icon={TrendingUp}
+              title="Completed"
+              value={loading ? "..." : stats.completedJobs.toString()}
+              change={stats.totalJobs > 0 ? { value: Number(stats.successRate), trend: "up" as const } : undefined}
+              icon={CheckCircle}
               delay={100}
             />
             <StatsCard
-              title="Avg. Process Time"
-              value="287ms"
-              change={{ value: 15, trend: "down" }}
-              icon={Clock}
+              title="Processing"
+              value={loading ? "..." : stats.processingJobs.toString()}
+              icon={TrendingUp}
               delay={200}
             />
             <StatsCard
-              title="Storage Used"
-              value="2.4 TB"
-              change={{ value: 3, trend: "neutral" }}
-              icon={Database}
+              title="Failed"
+              value={loading ? "..." : stats.failedJobs.toString()}
+              change={stats.failedJobs > 0 ? { value: stats.failedJobs, trend: "down" as const } : undefined}
+              icon={AlertCircle}
               delay={300}
             />
           </div>
@@ -97,8 +97,8 @@ const Index = () => {
                 <Cpu className="w-5 h-5 text-success" />
               </div>
               <div>
-                <p className="text-xs text-muted-foreground">CPU Usage</p>
-                <p className="text-lg font-semibold text-foreground">34%</p>
+                <p className="text-xs text-muted-foreground">Success Rate</p>
+                <p className="text-lg font-semibold text-foreground">{stats.successRate}%</p>
               </div>
             </div>
             <div className="glass-card p-4 flex items-center gap-3">
@@ -106,17 +106,17 @@ const Index = () => {
                 <HardDrive className="w-5 h-5 text-primary" />
               </div>
               <div>
-                <p className="text-xs text-muted-foreground">Memory</p>
-                <p className="text-lg font-semibold text-foreground">4.2 GB</p>
+                <p className="text-xs text-muted-foreground">Positive</p>
+                <p className="text-lg font-semibold text-foreground">{stats.sentimentCounts.positive || 0}</p>
               </div>
             </div>
             <div className="glass-card p-4 flex items-center gap-3">
               <div className="w-10 h-10 rounded-lg bg-accent/10 flex items-center justify-center">
-                <Database className="w-5 h-5 text-accent" />
+                <AlertCircle className="w-5 h-5 text-accent" />
               </div>
               <div>
-                <p className="text-xs text-muted-foreground">Queue Length</p>
-                <p className="text-lg font-semibold text-foreground">847</p>
+                <p className="text-xs text-muted-foreground">Negative</p>
+                <p className="text-lg font-semibold text-foreground">{stats.sentimentCounts.negative || 0}</p>
               </div>
             </div>
             <div className="glass-card p-4 flex items-center gap-3">
@@ -124,8 +124,8 @@ const Index = () => {
                 <TrendingUp className="w-5 h-5 text-success" />
               </div>
               <div>
-                <p className="text-xs text-muted-foreground">Throughput</p>
-                <p className="text-lg font-semibold text-foreground">1.2k/min</p>
+                <p className="text-xs text-muted-foreground">Neutral</p>
+                <p className="text-lg font-semibold text-foreground">{stats.sentimentCounts.neutral || 0}</p>
               </div>
             </div>
           </div>
