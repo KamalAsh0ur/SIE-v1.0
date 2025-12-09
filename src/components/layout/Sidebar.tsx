@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
+import { supabase } from "@/integrations/supabase/client";
 import { 
   LayoutDashboard, 
   Inbox, 
@@ -15,17 +16,8 @@ interface NavItem {
   icon: React.ElementType;
   label: string;
   id: string;
-  badge?: string;
+  badge?: number;
 }
-
-const navItems: NavItem[] = [
-  { icon: LayoutDashboard, label: "Dashboard", id: "dashboard" },
-  { icon: Inbox, label: "Jobs", id: "jobs", badge: "12" },
-  { icon: TrendingUp, label: "Insights", id: "insights" },
-  { icon: Database, label: "Storage", id: "storage" },
-  { icon: Code2, label: "API", id: "api" },
-  { icon: Settings, label: "Settings", id: "settings" },
-];
 
 interface SidebarProps {
   activeSection: string;
@@ -34,6 +26,43 @@ interface SidebarProps {
 
 export const Sidebar = ({ activeSection, onSectionChange }: SidebarProps) => {
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const [processingCount, setProcessingCount] = useState(0);
+
+  useEffect(() => {
+    const fetchProcessingCount = async () => {
+      const { count } = await supabase
+        .from('ingestion_jobs')
+        .select('*', { count: 'exact', head: true })
+        .in('status', ['pending', 'ingesting', 'processing', 'enriching']);
+      
+      setProcessingCount(count || 0);
+    };
+
+    fetchProcessingCount();
+
+    // Subscribe to job updates
+    const channel = supabase
+      .channel('sidebar-job-count')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'ingestion_jobs' },
+        () => fetchProcessingCount()
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
+
+  const navItems: NavItem[] = [
+    { icon: LayoutDashboard, label: "Dashboard", id: "dashboard" },
+    { icon: Inbox, label: "Jobs", id: "jobs", badge: processingCount > 0 ? processingCount : undefined },
+    { icon: TrendingUp, label: "Insights", id: "insights" },
+    { icon: Database, label: "Storage", id: "storage" },
+    { icon: Code2, label: "API", id: "api" },
+    { icon: Settings, label: "Settings", id: "settings" },
+  ];
 
   return (
     <aside 
@@ -81,7 +110,7 @@ export const Sidebar = ({ activeSection, onSectionChange }: SidebarProps) => {
               {!isCollapsed && (
                 <>
                   <span className="font-medium text-sm">{item.label}</span>
-                  {item.badge && (
+                  {item.badge !== undefined && item.badge > 0 && (
                     <span className="ml-auto text-xs bg-primary/20 text-primary px-2 py-0.5 rounded-full">
                       {item.badge}
                     </span>

@@ -2,25 +2,24 @@ import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Copy, Check } from "lucide-react";
 import { useState } from "react";
+import { toast } from "sonner";
 
 interface Endpoint {
-  method: "GET" | "POST" | "PUT" | "DELETE";
+  method: "GET" | "POST";
   path: string;
   description: string;
 }
 
 const endpoints: Endpoint[] = [
-  { method: "POST", path: "/ingest", description: "Submit ingestion jobs" },
-  { method: "GET", path: "/insights/:job_id", description: "Retrieve processed insights" },
-  { method: "GET", path: "/jobs/:job_id/status", description: "Check job status" },
-  { method: "GET", path: "/events/stream", description: "SSE event subscription" },
+  { method: "POST", path: "/functions/v1/ingest", description: "Submit ingestion jobs" },
+  { method: "GET", path: "/functions/v1/insights", description: "Get processed insights" },
+  { method: "GET", path: "/functions/v1/jobs", description: "List all jobs" },
+  { method: "GET", path: "/functions/v1/events", description: "Pipeline events stream" },
 ];
 
 const methodColors = {
   GET: "bg-success/10 text-success border-success/30",
   POST: "bg-primary/10 text-primary border-primary/30",
-  PUT: "bg-accent/10 text-accent border-accent/30",
-  DELETE: "bg-destructive/10 text-destructive border-destructive/30",
 };
 
 export const APIReference = () => {
@@ -29,6 +28,7 @@ export const APIReference = () => {
   const copyToClipboard = (text: string, index: number) => {
     navigator.clipboard.writeText(text);
     setCopiedIndex(index);
+    toast.success("Copied to clipboard");
     setTimeout(() => setCopiedIndex(null), 2000);
   };
 
@@ -64,10 +64,11 @@ export const APIReference = () => {
         ))}
       </div>
 
-      {/* API Key Info */}
+      {/* API Base URL */}
       <div className="mt-4 p-3 rounded-lg bg-primary/5 border border-primary/20">
         <p className="text-xs text-muted-foreground">
-          <span className="text-primary font-medium">Authentication:</span> Bearer token required for all endpoints.
+          <span className="text-primary font-medium">Base URL:</span>{" "}
+          <code className="text-foreground">{import.meta.env.VITE_SUPABASE_URL}</code>
         </p>
       </div>
     </div>
