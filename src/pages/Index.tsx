@@ -5,6 +5,7 @@ import Dashboard from "@/pages/Dashboard";
 import Jobs from "@/pages/Jobs";
 import Insights from "@/pages/Insights";
 import Storage from "@/pages/Storage";
+import Clients from "@/pages/Clients";
 import API from "@/pages/API";
 import Settings from "@/pages/Settings";
 
@@ -21,6 +22,8 @@ const Index = () => {
         return <Insights />;
       case "storage":
         return <Storage />;
+      case "clients":
+        return <Clients />;
       case "api":
         return <API />;
       case "settings":
@@ -40,6 +43,8 @@ const Index = () => {
         return { title: "Insights", subtitle: "Analyze extracted content" };
       case "storage":
         return { title: "Storage", subtitle: "Manage stored data" };
+      case "clients":
+        return { title: "API Clients", subtitle: "Manage external integrations" };
       case "api":
         return { title: "API Reference", subtitle: "Explore endpoints" };
       case "settings":

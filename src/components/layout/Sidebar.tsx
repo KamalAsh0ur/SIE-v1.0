@@ -9,7 +9,8 @@ import {
   Settings, 
   Code2,
   ChevronLeft,
-  Zap
+  Zap,
+  Users
 } from "lucide-react";
 
 interface NavItem {
@@ -60,6 +61,7 @@ export const Sidebar = ({ activeSection, onSectionChange }: SidebarProps) => {
     { icon: Inbox, label: "Jobs", id: "jobs", badge: processingCount > 0 ? processingCount : undefined },
     { icon: TrendingUp, label: "Insights", id: "insights" },
     { icon: Database, label: "Storage", id: "storage" },
+    { icon: Users, label: "Clients", id: "clients" },
     { icon: Code2, label: "API", id: "api" },
     { icon: Settings, label: "Settings", id: "settings" },
   ];

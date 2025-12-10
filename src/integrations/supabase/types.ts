@@ -14,6 +14,86 @@ export type Database = {
   }
   public: {
     Tables: {
+      api_clients: {
+        Row: {
+          allowed_endpoints: string[] | null
+          api_key: string
+          created_at: string
+          description: string | null
+          id: string
+          is_active: boolean
+          name: string
+          rate_limit_per_minute: number
+          updated_at: string
+          webhook_url: string | null
+        }
+        Insert: {
+          allowed_endpoints?: string[] | null
+          api_key?: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          name: string
+          rate_limit_per_minute?: number
+          updated_at?: string
+          webhook_url?: string | null
+        }
+        Update: {
+          allowed_endpoints?: string[] | null
+          api_key?: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          name?: string
+          rate_limit_per_minute?: number
+          updated_at?: string
+          webhook_url?: string | null
+        }
+        Relationships: []
+      }
+      api_usage_logs: {
+        Row: {
+          client_id: string | null
+          created_at: string
+          endpoint: string
+          id: string
+          ip_address: string | null
+          method: string
+          response_time_ms: number | null
+          status_code: number | null
+        }
+        Insert: {
+          client_id?: string | null
+          created_at?: string
+          endpoint: string
+          id?: string
+          ip_address?: string | null
+          method: string
+          response_time_ms?: number | null
+          status_code?: number | null
+        }
+        Update: {
+          client_id?: string | null
+          created_at?: string
+          endpoint?: string
+          id?: string
+          ip_address?: string | null
+          method?: string
+          response_time_ms?: number | null
+          status_code?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "api_usage_logs_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "api_clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       ingestion_jobs: {
         Row: {
           completed_at: string | null
@@ -161,6 +241,17 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      log_api_usage: {
+        Args: {
+          p_client_id: string
+          p_endpoint: string
+          p_ip_address?: string
+          p_method: string
+          p_response_time_ms: number
+          p_status_code: number
+        }
+        Returns: string
+      }
       log_pipeline_event: {
         Args: {
           p_event_type: string
@@ -170,6 +261,15 @@ export type Database = {
           p_stage: string
         }
         Returns: string
+      }
+      validate_api_key: {
+        Args: { p_api_key: string; p_endpoint: string }
+        Returns: {
+          client_id: string
+          client_name: string
+          is_valid: boolean
+          rate_limit: number
+        }[]
       }
     }
     Enums: {

@@ -3,7 +3,93 @@ import FirecrawlApp from 'https://esm.sh/@mendable/firecrawl-js@4.8.1?bundle-dep
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-api-key',
+}
+
+interface ValidateResult {
+  isValid: boolean
+  clientId?: string
+  clientName?: string
+  rateLimit?: number
+  webhookUrl?: string
+  error?: string
+}
+
+async function validateApiKey(
+  // deno-lint-ignore no-explicit-any
+  supabase: any,
+  apiKey: string | null,
+  endpoint: string
+): Promise<ValidateResult> {
+  if (!apiKey) {
+    return { isValid: true }
+  }
+
+  const { data, error } = await supabase.rpc('validate_api_key', {
+    p_api_key: apiKey,
+    p_endpoint: endpoint,
+  })
+
+  if (error || !data || data.length === 0) {
+    return { isValid: false, error: 'Invalid API key' }
+  }
+
+  const result = data[0]
+  if (!result.is_valid) {
+    return { isValid: false, error: 'API key is inactive or endpoint not allowed' }
+  }
+
+  // Get webhook URL
+  const { data: clientData } = await supabase
+    .from('api_clients')
+    .select('webhook_url')
+    .eq('id', result.client_id)
+    .single()
+
+  return {
+    isValid: true,
+    clientId: result.client_id,
+    clientName: result.client_name,
+    rateLimit: result.rate_limit,
+    webhookUrl: clientData?.webhook_url || undefined,
+  }
+}
+
+async function logApiUsage(
+  // deno-lint-ignore no-explicit-any
+  supabase: any,
+  clientId: string | undefined,
+  endpoint: string,
+  method: string,
+  statusCode: number,
+  responseTimeMs: number
+): Promise<void> {
+  if (!clientId) return
+
+  await supabase.rpc('log_api_usage', {
+    p_client_id: clientId,
+    p_endpoint: endpoint,
+    p_method: method,
+    p_status_code: statusCode,
+    p_response_time_ms: responseTimeMs,
+    p_ip_address: null,
+  })
+}
+
+async function sendWebhook(
+  webhookUrl: string,
+  payload: Record<string, unknown>
+): Promise<void> {
+  try {
+    await fetch(webhookUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+    console.log('Webhook sent to:', webhookUrl)
+  } catch (error) {
+    console.error('Webhook delivery failed:', error)
+  }
 }
 
 interface IngestRequest {
@@ -48,17 +134,32 @@ declare const EdgeRuntime: {
 }
 
 Deno.serve(async (req) => {
+  const startTime = Date.now()
+  
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders })
   }
 
-  try {
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!
-    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-    // deno-lint-ignore no-explicit-any
-    const supabase: any = createClient(supabaseUrl, supabaseKey)
+  const supabaseUrl = Deno.env.get('SUPABASE_URL')!
+  const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+  // deno-lint-ignore no-explicit-any
+  const supabase: any = createClient(supabaseUrl, supabaseKey)
 
+  // Validate API key if provided
+  const apiKey = req.headers.get('x-api-key')
+  const authResult = await validateApiKey(supabase, apiKey, 'ingest')
+  
+  if (!authResult.isValid) {
+    return new Response(
+      JSON.stringify({ error: authResult.error }),
+      { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    )
+  }
+
+  try {
     if (req.method !== 'POST') {
+      const responseTime = Date.now() - startTime
+      await logApiUsage(supabase, authResult.clientId, 'ingest', req.method, 405, responseTime)
       return new Response(
         JSON.stringify({ error: 'Method not allowed' }),
         { status: 405, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -66,9 +167,11 @@ Deno.serve(async (req) => {
     }
 
     const body: IngestRequest = await req.json()
-    console.log('Received ingest request:', body)
+    console.log('Received ingest request:', body, authResult.clientId ? `from client: ${authResult.clientName}` : '')
 
     if (!body.source_url) {
+      const responseTime = Date.now() - startTime
+      await logApiUsage(supabase, authResult.clientId, 'ingest', req.method, 400, responseTime)
       return new Response(
         JSON.stringify({ error: 'source_url is required' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -91,6 +194,8 @@ Deno.serve(async (req) => {
 
     if (jobError) {
       console.error('Error creating job:', jobError)
+      const responseTime = Date.now() - startTime
+      await logApiUsage(supabase, authResult.clientId, 'ingest', req.method, 500, responseTime)
       return new Response(
         JSON.stringify({ error: 'Failed to create ingestion job', details: jobError.message }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -104,10 +209,14 @@ Deno.serve(async (req) => {
       p_event_type: 'job_created',
       p_stage: 'ingestion',
       p_message: `Ingestion job created for ${platform} source`,
-      p_metadata: { source_url: body.source_url }
+      p_metadata: { source_url: body.source_url, client_id: authResult.clientId }
     })
 
-    EdgeRuntime.waitUntil(processJob(supabase, job.id, body.source_url, platform))
+    // Process job with webhook callback if client provided one
+    EdgeRuntime.waitUntil(processJob(supabase, job.id, body.source_url, platform, authResult.webhookUrl))
+
+    const responseTime = Date.now() - startTime
+    await logApiUsage(supabase, authResult.clientId, 'ingest', req.method, 201, responseTime)
 
     return new Response(
       JSON.stringify({ success: true, job_id: job.id, status: 'pending', message: 'Ingestion job queued successfully' }),
@@ -116,6 +225,8 @@ Deno.serve(async (req) => {
   } catch (err) {
     const error = err as Error
     console.error('Ingest error:', error)
+    const responseTime = Date.now() - startTime
+    await logApiUsage(supabase, authResult.clientId, 'ingest', req.method, 500, responseTime)
     return new Response(
       JSON.stringify({ error: 'Internal server error', details: error.message }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -412,7 +523,7 @@ function fallbackNLP(content: string, platform: string): NLPResult {
 }
 
 // deno-lint-ignore no-explicit-any
-async function processJob(supabase: any, jobId: string, sourceUrl: string, platform: string) {
+async function processJob(supabase: any, jobId: string, sourceUrl: string, platform: string, webhookUrl?: string) {
   const firecrawlApiKey = Deno.env.get('FIRECRAWL_API_KEY')
   
   if (!firecrawlApiKey) {
@@ -555,10 +666,33 @@ async function processJob(supabase: any, jobId: string, sourceUrl: string, platf
     })
 
     console.log(`Job ${jobId} completed successfully with NLP and OCR`)
+
+    // Send webhook notification if configured
+    if (webhookUrl) {
+      await sendWebhook(webhookUrl, {
+        event: 'job.completed',
+        job_id: jobId,
+        status: 'completed',
+        source_url: sourceUrl,
+        platform,
+        timestamp: new Date().toISOString()
+      })
+    }
   } catch (err) {
     const error = err as Error
     console.error(`Error processing job ${jobId}:`, error)
     await supabase.from('ingestion_jobs').update({ status: 'failed', error_message: error.message }).eq('id', jobId)
     await supabase.rpc('log_pipeline_event', { p_job_id: jobId, p_event_type: 'job_failed', p_stage: 'error', p_message: `Job failed: ${error.message}` })
+
+    // Send webhook notification for failure
+    if (webhookUrl) {
+      await sendWebhook(webhookUrl, {
+        event: 'job.failed',
+        job_id: jobId,
+        status: 'failed',
+        error: error.message,
+        timestamp: new Date().toISOString()
+      })
+    }
   }
 }
