@@ -1,0 +1,319 @@
+{
+    "annotations": {
+        "list": []
+    },
+    "editable": true,
+    "fiscalYearStartMonth": 0,
+    "graphTooltip": 0,
+    "id": null,
+    "links": [],
+    "liveNow": false,
+    "panels": [
+        {
+            "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+            },
+            "fieldConfig": {
+                "defaults": {
+                    "color": {
+                        "mode": "palette-classic"
+                    },
+                    "unit": "short"
+                }
+            },
+            "gridPos": {
+                "h": 4,
+                "w": 6,
+                "x": 0,
+                "y": 0
+            },
+            "id": 1,
+            "title": "Total Jobs Submitted",
+            "type": "stat",
+            "targets": [
+                {
+                    "expr": "sum(sie_jobs_submitted_total)",
+                    "legendFormat": "Jobs"
+                }
+            ]
+        },
+        {
+            "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+            },
+            "fieldConfig": {
+                "defaults": {
+                    "color": {
+                        "mode": "palette-classic"
+                    },
+                    "unit": "short"
+                }
+            },
+            "gridPos": {
+                "h": 4,
+                "w": 6,
+                "x": 6,
+                "y": 0
+            },
+            "id": 2,
+            "title": "Jobs In Progress",
+            "type": "stat",
+            "targets": [
+                {
+                    "expr": "sie_jobs_in_progress",
+                    "legendFormat": "In Progress"
+                }
+            ]
+        },
+        {
+            "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+            },
+            "fieldConfig": {
+                "defaults": {
+                    "color": {
+                        "mode": "palette-classic"
+                    },
+                    "unit": "short"
+                }
+            },
+            "gridPos": {
+                "h": 4,
+                "w": 6,
+                "x": 12,
+                "y": 0
+            },
+            "id": 3,
+            "title": "DLQ Length",
+            "type": "stat",
+            "targets": [
+                {
+                    "expr": "sie_dlq_length",
+                    "legendFormat": "DLQ"
+                }
+            ],
+            "options": {
+                "colorMode": "value",
+                "graphMode": "area"
+            }
+        },
+        {
+            "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+            },
+            "fieldConfig": {
+                "defaults": {
+                    "color": {
+                        "mode": "palette-classic"
+                    },
+                    "unit": "percentunit"
+                }
+            },
+            "gridPos": {
+                "h": 4,
+                "w": 6,
+                "x": 18,
+                "y": 0
+            },
+            "id": 4,
+            "title": "Error Rate",
+            "type": "stat",
+            "targets": [
+                {
+                    "expr": "sum(rate(sie_http_requests_total{status=~\"5..\"}[5m])) / sum(rate(sie_http_requests_total[5m]))",
+                    "legendFormat": "Error Rate"
+                }
+            ]
+        },
+        {
+            "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+            },
+            "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 0,
+                "y": 4
+            },
+            "id": 5,
+            "title": "Request Rate by Endpoint",
+            "type": "timeseries",
+            "targets": [
+                {
+                    "expr": "sum by (endpoint) (rate(sie_http_requests_total[1m]))",
+                    "legendFormat": "{{endpoint}}"
+                }
+            ]
+        },
+        {
+            "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+            },
+            "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 12,
+                "y": 4
+            },
+            "id": 6,
+            "title": "Request Duration (p95)",
+            "type": "timeseries",
+            "fieldConfig": {
+                "defaults": {
+                    "unit": "s"
+                }
+            },
+            "targets": [
+                {
+                    "expr": "histogram_quantile(0.95, sum by (endpoint, le) (rate(sie_http_request_duration_seconds_bucket[5m])))",
+                    "legendFormat": "{{endpoint}}"
+                }
+            ]
+        },
+        {
+            "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+            },
+            "gridPos": {
+                "h": 8,
+                "w": 8,
+                "x": 0,
+                "y": 12
+            },
+            "id": 7,
+            "title": "Job Duration Distribution",
+            "type": "histogram",
+            "targets": [
+                {
+                    "expr": "histogram_quantile(0.5, sum by (le) (rate(sie_job_duration_seconds_bucket[5m])))",
+                    "legendFormat": "p50"
+                },
+                {
+                    "expr": "histogram_quantile(0.95, sum by (le) (rate(sie_job_duration_seconds_bucket[5m])))",
+                    "legendFormat": "p95"
+                },
+                {
+                    "expr": "histogram_quantile(0.99, sum by (le) (rate(sie_job_duration_seconds_bucket[5m])))",
+                    "legendFormat": "p99"
+                }
+            ]
+        },
+        {
+            "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+            },
+            "gridPos": {
+                "h": 8,
+                "w": 8,
+                "x": 8,
+                "y": 12
+            },
+            "id": 8,
+            "title": "NLP Processing",
+            "type": "timeseries",
+            "targets": [
+                {
+                    "expr": "sum by (sentiment) (rate(sie_nlp_processed_total[5m]))",
+                    "legendFormat": "{{sentiment}}"
+                }
+            ]
+        },
+        {
+            "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+            },
+            "gridPos": {
+                "h": 8,
+                "w": 8,
+                "x": 16,
+                "y": 12
+            },
+            "id": 9,
+            "title": "OCR Performance",
+            "type": "timeseries",
+            "fieldConfig": {
+                "defaults": {
+                    "unit": "s"
+                }
+            },
+            "targets": [
+                {
+                    "expr": "histogram_quantile(0.95, sum by (le) (rate(sie_ocr_duration_seconds_bucket[5m])))",
+                    "legendFormat": "p95 Duration"
+                }
+            ]
+        },
+        {
+            "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+            },
+            "gridPos": {
+                "h": 6,
+                "w": 12,
+                "x": 0,
+                "y": 20
+            },
+            "id": 10,
+            "title": "Queue Length",
+            "type": "timeseries",
+            "targets": [
+                {
+                    "expr": "sie_queue_length",
+                    "legendFormat": "{{queue}}"
+                }
+            ]
+        },
+        {
+            "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+            },
+            "gridPos": {
+                "h": 6,
+                "w": 12,
+                "x": 12,
+                "y": 20
+            },
+            "id": 11,
+            "title": "Scraper Requests",
+            "type": "timeseries",
+            "targets": [
+                {
+                    "expr": "sum by (platform, status) (rate(sie_scraper_requests_total[5m]))",
+                    "legendFormat": "{{platform}} - {{status}}"
+                }
+            ]
+        }
+    ],
+    "refresh": "30s",
+    "schemaVersion": 38,
+    "style": "dark",
+    "tags": [
+        "sie",
+        "backend",
+        "ingestion"
+    ],
+    "templating": {
+        "list": []
+    },
+    "time": {
+        "from": "now-1h",
+        "to": "now"
+    },
+    "timepicker": {},
+    "timezone": "browser",
+    "title": "SIE Backend Dashboard",
+    "uid": "sie-backend",
+    "version": 1,
+    "weekStart": ""
+}

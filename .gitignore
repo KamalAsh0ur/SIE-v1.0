@@ -22,3 +22,34 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+.venv-stable/
+venv/
+ENV/
+env/
+*.egg-info/
+.eggs/
+
+# Environment files (contain secrets)
+.env
+backend/.env
+!backend/.env.example
+
+# Database
+*.db
+*.sqlite3
+
+# Test artifacts
+.coverage
+htmlcov/
+.pytest_cache/
+
+# Archive folder (local development)
+archive/

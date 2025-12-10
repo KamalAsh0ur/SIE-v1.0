@@ -1,73 +1,91 @@
-# Welcome to your Lovable project
+# SIE Backend - Smart Ingestion Engine
 
-## Project info
+Python FastAPI backend service for content ingestion, NLP analysis, and insight generation.
 
-**URL**: https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID
+## Tech Stack
+- **Framework**: FastAPI
+- **Workers**: Celery + Redis
+- **NLP**: spaCy, VADER, HuggingFace DistilBERT
+- **OCR**: EasyOCR
+- **Database**: PostgreSQL (Supabase)
+- **Search**: Meilisearch
 
-## How can I edit this code?
+## Quick Start
 
-There are several ways of editing your application.
+### Prerequisites
+- Python 3.11+
+- Redis
+- Docker (optional)
 
-**Use Lovable**
+### Local Development
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and start prompting.
+```bash
+# Create virtual environment
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
 
-Changes made via Lovable will be committed automatically to this repo.
+# Install dependencies
+pip install -r requirements.txt
 
-**Use your preferred IDE**
+# Download NLP models
+python -m spacy download en_core_web_sm
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+# Set environment variables
+cp .env.example .env
+# Edit .env with your credentials
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+# Start Redis (required for Celery)
+docker run -d -p 6379:6379 redis:alpine
 
-Follow these steps:
+# Start FastAPI server
+uvicorn app.main:app --reload --port 8000
 
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
-
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
-
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
-npm run dev
+# Start Celery worker (in another terminal)
+celery -A app.workers.celery_app worker --loglevel=info
 ```
 
-**Edit a file directly in GitHub**
+### Docker Deployment
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+```bash
+docker-compose up --build
+```
 
-**Use GitHub Codespaces**
+## API Endpoints
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/ingest` | Submit ingestion job |
+| GET | `/jobs` | List all jobs |
+| GET | `/jobs/{job_id}` | Get job status |
+| GET | `/insights/{job_id}` | Get processed insights |
+| GET | `/events/stream` | SSE event stream |
+| GET | `/health` | Health check |
 
-## What technologies are used for this project?
+## Project Structure
 
-This project is built with:
+```
+backend/
+├── app/
+│   ├── main.py           # FastAPI entry point
+│   ├── config.py         # Settings
+│   ├── api/
+│   │   ├── routes/       # API endpoints
+│   │   └── deps.py       # Dependencies
+│   ├── models/           # Database & Pydantic models
+│   ├── services/         # Business logic
+│   └── workers/          # Celery tasks
+├── tests/
+├── requirements.txt
+├── Dockerfile
+└── docker-compose.yml
+```
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+## Environment Variables
 
-## How can I deploy this project?
-
-Simply open [Lovable](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and click on Share -> Publish.
-
-## Can I connect a custom domain to my Lovable project?
-
-Yes, you can!
-
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
-
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+```env
+DATABASE_URL=postgresql://...
+REDIS_URL=redis://localhost:6379
+API_SECRET_KEY=your-secret-key
+MEILISEARCH_URL=http://localhost:7700
+MEILISEARCH_KEY=your-meilisearch-key
+```

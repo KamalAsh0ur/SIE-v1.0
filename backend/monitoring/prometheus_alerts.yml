@@ -1,0 +1,195 @@
+# SIE Backend Prometheus Alert Rules
+# Place in /etc/prometheus/rules/sie_alerts.yml
+
+groups:
+  - name: sie_service_health
+    interval: 30s
+    rules:
+      # Service Down
+      - alert: SIEServiceDown
+        expr: up{job="sie-backend"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "SIE API service is down"
+          description: "SIE backend has been unreachable for more than 1 minute."
+
+      # High Error Rate
+      - alert: SIEHighErrorRate
+        expr: |
+          sum(rate(sie_http_requests_total{status=~"5.."}[5m])) 
+          / sum(rate(sie_http_requests_total[5m])) > 0.05
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "SIE error rate above 5%"
+          description: "API error rate is {{ $value | humanizePercentage }} over the last 5 minutes."
+
+      # API Latency High
+      - alert: SIEHighAPILatency
+        expr: |
+          histogram_quantile(0.95, sum(rate(sie_http_request_duration_seconds_bucket[5m])) by (le)) > 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "SIE API p95 latency exceeds 1s"
+          description: "API response time p95 is {{ $value | humanizeDuration }}."
+
+  - name: sie_queue_health
+    interval: 30s
+    rules:
+      # Queue Stagnation
+      - alert: SIEQueueStagnation
+        expr: sie_queue_length{queue="ingestion"} > 1000
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "SIE ingestion queue is backing up"
+          description: "Queue length is {{ $value }} and has been above 1000 for 10 minutes."
+
+      # Queue Critical
+      - alert: SIEQueueCritical
+        expr: sie_queue_length{queue="ingestion"} > 5000
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "SIE queue critically overloaded"
+          description: "Queue length is {{ $value }}. Workers may need scaling."
+
+      # DLQ Growing
+      - alert: SIEDLQGrowing
+        expr: sie_dlq_length > 100
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "SIE dead letter queue growing"
+          description: "DLQ has {{ $value }} failed jobs. Investigation needed."
+
+      # DLQ Critical
+      - alert: SIEDLQCritical
+        expr: sie_dlq_length > 500
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "SIE DLQ overflow"
+          description: "DLQ has {{ $value }} failed jobs. System may be failing."
+
+  - name: sie_workers
+    interval: 30s
+    rules:
+      # No Jobs Processing
+      - alert: SIENoJobsProcessing
+        expr: |
+          sie_jobs_in_progress == 0 
+          and sie_queue_length > 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "SIE workers not processing jobs"
+          description: "Queue has jobs but no processing is happening. Workers may be down."
+
+      # Job Duration Too Long
+      - alert: SIEJobDurationHigh
+        expr: |
+          histogram_quantile(0.95, sum(rate(sie_job_duration_seconds_bucket[10m])) by (le)) > 300
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "SIE job processing too slow"
+          description: "p95 job duration is {{ $value | humanizeDuration }}."
+
+  - name: sie_nlp_ocr
+    interval: 30s
+    rules:
+      # NLP Latency High
+      - alert: SIENLPLatencyHigh
+        expr: |
+          histogram_quantile(0.95, sum(rate(sie_nlp_duration_seconds_bucket[5m])) by (le)) > 0.5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "SIE NLP processing slow"
+          description: "NLP p95 latency is {{ $value | humanizeDuration }}."
+
+      # OCR Latency High
+      - alert: SIEOCRLatencyHigh
+        expr: |
+          histogram_quantile(0.95, sum(rate(sie_ocr_duration_seconds_bucket[5m])) by (le)) > 5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "SIE OCR processing slow"
+          description: "OCR p95 latency is {{ $value | humanizeDuration }}."
+
+      # OCR Low Confidence
+      - alert: SIEOCRLowConfidence
+        expr: |
+          histogram_quantile(0.5, sum(rate(sie_ocr_confidence_bucket[1h])) by (le)) < 0.5
+        for: 30m
+        labels:
+          severity: info
+        annotations:
+          summary: "SIE OCR confidence dropping"
+          description: "Median OCR confidence is {{ $value }}. Image quality may be poor."
+
+  - name: sie_scrapers
+    interval: 60s
+    rules:
+      # Scraper Blocks Detected
+      - alert: SIEScraperBlocked
+        expr: |
+          sum(rate(sie_scraper_requests_total{status="blocked"}[10m])) > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "SIE scraper being blocked"
+          description: "Scraper is receiving blocks from target sites."
+
+      # Scraper High Failure Rate
+      - alert: SIEScraperFailures
+        expr: |
+          sum(rate(sie_scraper_requests_total{status="error"}[10m])) 
+          / sum(rate(sie_scraper_requests_total[10m])) > 0.2
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "SIE scraper error rate high"
+          description: "Scraper failure rate is {{ $value | humanizePercentage }}."
+
+  - name: sie_storage
+    interval: 60s
+    rules:
+      # Database Connection Issues
+      - alert: SIEDatabaseSlow
+        expr: |
+          histogram_quantile(0.95, sum(rate(sie_db_query_duration_seconds_bucket[5m])) by (le)) > 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "SIE database queries slow"
+          description: "Database query p95 is {{ $value | humanizeDuration }}."
+
+      # Storage Growing Fast
+      - alert: SIEStorageGrowing
+        expr: |
+          deriv(sie_storage_size_bytes{storage_type="hot"}[1h]) > 100000000
+        for: 1h
+        labels:
+          severity: info
+        annotations:
+          summary: "SIE storage growing rapidly"
+          description: "Hot storage increasing by {{ $value | humanizeBytes }}/hour."

@@ -1,0 +1,274 @@
+{
+    "info": {
+        "name": "SIE API",
+        "description": "Smart Ingestion Engine API Collection",
+        "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+        "_postman_id": "sie-api-collection"
+    },
+    "variable": [
+        {
+            "key": "baseUrl",
+            "value": "http://localhost:8000",
+            "type": "string"
+        },
+        {
+            "key": "apiKey",
+            "value": "dev-api-key-12345",
+            "type": "string"
+        }
+    ],
+    "auth": {
+        "type": "apikey",
+        "apikey": [
+            {
+                "key": "key",
+                "value": "X-API-Key",
+                "type": "string"
+            },
+            {
+                "key": "value",
+                "value": "{{apiKey}}",
+                "type": "string"
+            }
+        ]
+    },
+    "item": [
+        {
+            "name": "Health",
+            "item": [
+                {
+                    "name": "Health Check",
+                    "request": {
+                        "method": "GET",
+                        "url": "{{baseUrl}}/health"
+                    }
+                },
+                {
+                    "name": "Readiness Check",
+                    "request": {
+                        "method": "GET",
+                        "url": "{{baseUrl}}/ready"
+                    }
+                }
+            ]
+        },
+        {
+            "name": "Ingestion",
+            "item": [
+                {
+                    "name": "Submit Job",
+                    "request": {
+                        "method": "POST",
+                        "url": "{{baseUrl}}/ingest",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"source_type\": \"scraped\",\n  \"tenant\": \"my-tenant\",\n  \"keywords\": [\"python\", \"fastapi\"],\n  \"mode\": \"realtime\",\n  \"priority\": \"normal\"\n}"
+                        }
+                    }
+                },
+                {
+                    "name": "Submit Job with Items",
+                    "request": {
+                        "method": "POST",
+                        "url": "{{baseUrl}}/ingest",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"source_type\": \"meta_api\",\n  \"tenant\": \"my-tenant\",\n  \"items\": [\n    {\n      \"id\": \"post-1\",\n      \"content\": \"This is a great product!\",\n      \"author\": \"user123\"\n    },\n    {\n      \"id\": \"post-2\",\n      \"content\": \"Not satisfied with the quality.\",\n      \"author\": \"user456\"\n    }\n  ],\n  \"mode\": \"historical\",\n  \"priority\": \"high\"\n}"
+                        }
+                    }
+                },
+                {
+                    "name": "Submit Batch Jobs",
+                    "request": {
+                        "method": "POST",
+                        "url": "{{baseUrl}}/ingest/batch",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "[\n  {\n    \"source_type\": \"scraped\",\n    \"tenant\": \"tenant-1\",\n    \"keywords\": [\"news\"],\n    \"mode\": \"realtime\",\n    \"priority\": \"normal\"\n  },\n  {\n    \"source_type\": \"scraped\",\n    \"tenant\": \"tenant-2\",\n    \"keywords\": [\"sports\"],\n    \"mode\": \"realtime\",\n    \"priority\": \"low\"\n  }\n]"
+                        }
+                    }
+                }
+            ]
+        },
+        {
+            "name": "Jobs",
+            "item": [
+                {
+                    "name": "List Jobs",
+                    "request": {
+                        "method": "GET",
+                        "url": {
+                            "raw": "{{baseUrl}}/jobs?limit=10&status=pending",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "jobs"
+                            ],
+                            "query": [
+                                {
+                                    "key": "limit",
+                                    "value": "10"
+                                },
+                                {
+                                    "key": "status",
+                                    "value": "pending"
+                                }
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Get Job Details",
+                    "request": {
+                        "method": "GET",
+                        "url": "{{baseUrl}}/jobs/{{jobId}}"
+                    }
+                },
+                {
+                    "name": "Get Job Status",
+                    "request": {
+                        "method": "GET",
+                        "url": "{{baseUrl}}/jobs/{{jobId}}/status"
+                    }
+                },
+                {
+                    "name": "Cancel Job",
+                    "request": {
+                        "method": "DELETE",
+                        "url": "{{baseUrl}}/jobs/{{jobId}}"
+                    }
+                }
+            ]
+        },
+        {
+            "name": "Insights",
+            "item": [
+                {
+                    "name": "Get Job Insights",
+                    "request": {
+                        "method": "GET",
+                        "url": {
+                            "raw": "{{baseUrl}}/insights/{{jobId}}?limit=50&exclude_spam=true",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "insights",
+                                "{{jobId}}"
+                            ],
+                            "query": [
+                                {
+                                    "key": "limit",
+                                    "value": "50"
+                                },
+                                {
+                                    "key": "exclude_spam",
+                                    "value": "true"
+                                }
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Get Insights Summary",
+                    "request": {
+                        "method": "GET",
+                        "url": "{{baseUrl}}/insights/{{jobId}}/summary"
+                    }
+                }
+            ]
+        },
+        {
+            "name": "Search",
+            "item": [
+                {
+                    "name": "Full-Text Search",
+                    "request": {
+                        "method": "GET",
+                        "url": {
+                            "raw": "{{baseUrl}}/search?q=product review&sentiment=positive&limit=20",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "search"
+                            ],
+                            "query": [
+                                {
+                                    "key": "q",
+                                    "value": "product review"
+                                },
+                                {
+                                    "key": "sentiment",
+                                    "value": "positive"
+                                },
+                                {
+                                    "key": "limit",
+                                    "value": "20"
+                                }
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Search Stats",
+                    "request": {
+                        "method": "GET",
+                        "url": "{{baseUrl}}/search/stats"
+                    }
+                }
+            ]
+        },
+        {
+            "name": "Events",
+            "item": [
+                {
+                    "name": "Get Recent Events",
+                    "request": {
+                        "method": "GET",
+                        "url": "{{baseUrl}}/events/recent"
+                    }
+                },
+                {
+                    "name": "SSE Stream",
+                    "description": "Note: This is an SSE endpoint. Use browser or dedicated SSE client.",
+                    "request": {
+                        "method": "GET",
+                        "url": "{{baseUrl}}/events/stream"
+                    }
+                }
+            ]
+        },
+        {
+            "name": "Monitoring",
+            "item": [
+                {
+                    "name": "Prometheus Metrics",
+                    "request": {
+                        "method": "GET",
+                        "url": "{{baseUrl}}/metrics"
+                    }
+                }
+            ]
+        }
+    ]
+}

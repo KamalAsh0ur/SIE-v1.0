@@ -1,0 +1,147 @@
+# SIE Backend - Docker Compose Configuration
+# Orchestrates all backend services for local development
+
+version: '3.8'
+
+services:
+  # ===========================================================================
+  # FastAPI Backend
+  # ===========================================================================
+  api:
+    build:
+      context: .
+      target: development
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/sie
+      - REDIS_URL=redis://redis:6379
+      - MEILISEARCH_URL=http://meilisearch:7700
+      - MEILISEARCH_KEY=masterKey
+      - ENVIRONMENT=development
+      - DEBUG=true
+    volumes:
+      - .:/app
+    depends_on:
+      - db
+      - redis
+      - meilisearch
+    networks:
+      - sie-network
+    restart: unless-stopped
+
+  # ===========================================================================
+  # Celery Worker
+  # ===========================================================================
+  worker:
+    build:
+      context: .
+      target: worker
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/sie
+      - REDIS_URL=redis://redis:6379
+      - MEILISEARCH_URL=http://meilisearch:7700
+      - ENVIRONMENT=development
+    volumes:
+      - .:/app
+    depends_on:
+      - db
+      - redis
+    networks:
+      - sie-network
+    restart: unless-stopped
+    deploy:
+      replicas: 2 # Run 2 workers
+
+  # ===========================================================================
+  # Celery Flower (Monitoring)
+  # ===========================================================================
+  flower:
+    build:
+      context: .
+      target: production
+    command: celery -A app.workers.celery_app flower --port=5555
+    ports:
+      - "5555:5555"
+    environment:
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      - redis
+      - worker
+    networks:
+      - sie-network
+    restart: unless-stopped
+
+  # ===========================================================================
+  # PostgreSQL Database
+  # ===========================================================================
+  db:
+    image: postgres:15-alpine
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=sie
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    networks:
+      - sie-network
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U postgres" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ===========================================================================
+  # Redis (Celery Broker + Cache)
+  # ===========================================================================
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - sie-network
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ===========================================================================
+  # Meilisearch (Search Engine)
+  # ===========================================================================
+  meilisearch:
+    image: getmeili/meilisearch:v1.6
+    ports:
+      - "7700:7700"
+    environment:
+      - MEILI_MASTER_KEY=masterKey
+      - MEILI_ENV=development
+    volumes:
+      - meilisearch_data:/meili_data
+    networks:
+      - sie-network
+    healthcheck:
+      test: [ "CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:7700/health" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+# ===========================================================================
+# Networks
+# ===========================================================================
+networks:
+  sie-network:
+    driver: bridge
+
+# ===========================================================================
+# Volumes
+# ===========================================================================
+volumes:
+  postgres_data:
+  redis_data:
+  meilisearch_data:
