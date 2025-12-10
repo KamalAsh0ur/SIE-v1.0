@@ -64,6 +64,7 @@ export type Database = {
       }
       insights: {
         Row: {
+          confidence_scores: Json | null
           created_at: string
           engagement_metrics: Json | null
           entities: Json | null
@@ -71,12 +72,14 @@ export type Database = {
           job_id: string
           keywords: string[] | null
           language: string | null
+          ocr_text: string | null
           sentiment: Database["public"]["Enums"]["sentiment_type"]
           sentiment_score: number | null
           summary: string | null
           topics: string[] | null
         }
         Insert: {
+          confidence_scores?: Json | null
           created_at?: string
           engagement_metrics?: Json | null
           entities?: Json | null
@@ -84,12 +87,14 @@ export type Database = {
           job_id: string
           keywords?: string[] | null
           language?: string | null
+          ocr_text?: string | null
           sentiment?: Database["public"]["Enums"]["sentiment_type"]
           sentiment_score?: number | null
           summary?: string | null
           topics?: string[] | null
         }
         Update: {
+          confidence_scores?: Json | null
           created_at?: string
           engagement_metrics?: Json | null
           entities?: Json | null
@@ -97,6 +102,7 @@ export type Database = {
           job_id?: string
           keywords?: string[] | null
           language?: string | null
+          ocr_text?: string | null
           sentiment?: Database["public"]["Enums"]["sentiment_type"]
           sentiment_score?: number | null
           summary?: string | null

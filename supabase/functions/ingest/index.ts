@@ -13,6 +13,36 @@ interface IngestRequest {
   metadata?: Record<string, unknown>
 }
 
+interface NLPResult {
+  sentiment: {
+    type: 'positive' | 'negative' | 'neutral' | 'mixed'
+    score: number
+    confidence: number
+  }
+  entities: Array<{
+    type: string
+    name: string
+    confidence: number
+  }>
+  topics: string[]
+  keywords: string[]
+  language: {
+    code: string
+    name: string
+    confidence: number
+  }
+  summary: string
+}
+
+interface OCRResult {
+  text: string
+  confidence: number
+  regions: Array<{
+    text: string
+    confidence: number
+  }>
+}
+
 declare const EdgeRuntime: {
   waitUntil(promise: Promise<unknown>): void
 }
@@ -103,107 +133,215 @@ function detectPlatform(url: string): string {
   return 'news'
 }
 
-// deno-lint-ignore no-explicit-any
-async function processJob(supabase: any, jobId: string, sourceUrl: string, platform: string) {
-  const firecrawlApiKey = Deno.env.get('FIRECRAWL_API_KEY')
+// AI-powered NLP analysis using Lovable AI Gateway
+async function analyzeWithNLP(content: string, platform: string): Promise<NLPResult> {
+  const lovableApiKey = Deno.env.get('LOVABLE_API_KEY')
   
-  if (!firecrawlApiKey) {
-    console.error('FIRECRAWL_API_KEY not configured')
-    await supabase.from('ingestion_jobs').update({ status: 'failed', error_message: 'Firecrawl API key not configured' }).eq('id', jobId)
-    await supabase.rpc('log_pipeline_event', { p_job_id: jobId, p_event_type: 'job_failed', p_stage: 'error', p_message: 'Firecrawl API key not configured' })
-    return
+  if (!lovableApiKey) {
+    console.warn('LOVABLE_API_KEY not configured, using fallback NLP')
+    return fallbackNLP(content, platform)
   }
 
   try {
-    console.log(`Starting Firecrawl scraping for job ${jobId}: ${sourceUrl}`)
-
-    // Update status to ingesting
-    await supabase.from('ingestion_jobs').update({ status: 'ingesting', started_at: new Date().toISOString(), progress: 10 }).eq('id', jobId)
-    await supabase.rpc('log_pipeline_event', { p_job_id: jobId, p_event_type: 'status_change', p_stage: 'ingestion', p_message: 'Started Firecrawl content scraping' })
-
-    // Initialize Firecrawl and scrape
-    const firecrawl = new FirecrawlApp({ apiKey: firecrawlApiKey })
+    console.log('Calling Lovable AI for NLP analysis...')
     
-    const scrapeResult = await firecrawl.scrape(sourceUrl, {
-      formats: ['markdown', 'html', 'links'],
-      onlyMainContent: true,
-      waitFor: 2000,
+    const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${lovableApiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'google/gemini-2.5-flash',
+        messages: [
+          {
+            role: 'system',
+            content: `You are an NLP analysis engine for social media intelligence. Analyze the provided content and extract structured insights. Always respond with valid JSON only, no markdown.`
+          },
+          {
+            role: 'user',
+            content: `Analyze this ${platform} content and provide NLP insights:
+
+${content.slice(0, 8000)}
+
+Respond with ONLY valid JSON in this exact format:
+{
+  "sentiment": {
+    "type": "positive" | "negative" | "neutral" | "mixed",
+    "score": number between -1 and 1,
+    "confidence": number between 0 and 1
+  },
+  "entities": [
+    {"type": "person|organization|location|product|event", "name": "string", "confidence": number}
+  ],
+  "topics": ["topic1", "topic2", "topic3"],
+  "keywords": ["keyword1", "keyword2", "keyword3", "keyword4", "keyword5"],
+  "language": {
+    "code": "ISO 639-1 code",
+    "name": "Language name",
+    "confidence": number between 0 and 1
+  },
+  "summary": "Brief 2-3 sentence summary of the content"
+}`
+          }
+        ],
+        tools: [
+          {
+            type: "function",
+            function: {
+              name: "nlp_analysis",
+              description: "Extract NLP insights from content",
+              parameters: {
+                type: "object",
+                properties: {
+                  sentiment: {
+                    type: "object",
+                    properties: {
+                      type: { type: "string", enum: ["positive", "negative", "neutral", "mixed"] },
+                      score: { type: "number" },
+                      confidence: { type: "number" }
+                    },
+                    required: ["type", "score", "confidence"]
+                  },
+                  entities: {
+                    type: "array",
+                    items: {
+                      type: "object",
+                      properties: {
+                        type: { type: "string" },
+                        name: { type: "string" },
+                        confidence: { type: "number" }
+                      },
+                      required: ["type", "name", "confidence"]
+                    }
+                  },
+                  topics: { type: "array", items: { type: "string" } },
+                  keywords: { type: "array", items: { type: "string" } },
+                  language: {
+                    type: "object",
+                    properties: {
+                      code: { type: "string" },
+                      name: { type: "string" },
+                      confidence: { type: "number" }
+                    },
+                    required: ["code", "name", "confidence"]
+                  },
+                  summary: { type: "string" }
+                },
+                required: ["sentiment", "entities", "topics", "keywords", "language", "summary"]
+              }
+            }
+          }
+        ],
+        tool_choice: { type: "function", function: { name: "nlp_analysis" } }
+      })
     })
 
-    if (!scrapeResult.success) {
-      throw new Error(`Firecrawl scrape failed: ${scrapeResult.error || 'Unknown error'}`)
+    if (!response.ok) {
+      const errorText = await response.text()
+      console.error('Lovable AI error:', response.status, errorText)
+      throw new Error(`AI gateway error: ${response.status}`)
     }
 
-    console.log(`Firecrawl scrape successful for job ${jobId}`)
+    const data = await response.json()
+    console.log('Lovable AI response received')
 
-    // Store raw content
-    await supabase.from('ingestion_jobs').update({ 
-      status: 'processing', 
-      progress: 40,
-      raw_content: scrapeResult.markdown || scrapeResult.html
-    }).eq('id', jobId)
-    
-    await supabase.rpc('log_pipeline_event', { 
-      p_job_id: jobId, 
-      p_event_type: 'status_change', 
-      p_stage: 'processing', 
-      p_message: 'Content scraped successfully, processing with NLP pipeline',
-      p_metadata: { 
-        content_length: (scrapeResult.markdown || '').length,
-        links_found: (scrapeResult.links || []).length
+    // Extract from tool call
+    const toolCall = data.choices?.[0]?.message?.tool_calls?.[0]
+    if (toolCall?.function?.arguments) {
+      const result = JSON.parse(toolCall.function.arguments)
+      return result as NLPResult
+    }
+
+    // Fallback to parsing content directly
+    const content_response = data.choices?.[0]?.message?.content
+    if (content_response) {
+      const jsonMatch = content_response.match(/\{[\s\S]*\}/)
+      if (jsonMatch) {
+        return JSON.parse(jsonMatch[0]) as NLPResult
       }
-    })
+    }
 
-    // Update to enriching stage
-    await supabase.from('ingestion_jobs').update({ status: 'enriching', progress: 70 }).eq('id', jobId)
-    await supabase.rpc('log_pipeline_event', { p_job_id: jobId, p_event_type: 'status_change', p_stage: 'enrichment', p_message: 'Enriching data with entity recognition' })
-
-    // Extract insights from scraped content
-    const content = scrapeResult.markdown || ''
-    const sentiment = analyzeSentiment(content)
-    const keywords = extractKeywords(content)
-    const metadata = scrapeResult.metadata || {}
-
-    await supabase.from('insights').insert({
-      job_id: jobId,
-      sentiment: sentiment.type,
-      sentiment_score: sentiment.score,
-      summary: metadata.description || content.slice(0, 500),
-      keywords: keywords,
-      topics: extractTopics(content, platform),
-      entities: extractEntities(metadata),
-      engagement_metrics: { 
-        links_found: (scrapeResult.links || []).length,
-        content_length: content.length,
-        source_title: metadata.title || 'Unknown'
-      }
-    })
-
-    // Mark as completed
-    await supabase.from('ingestion_jobs').update({ status: 'completed', progress: 100, completed_at: new Date().toISOString() }).eq('id', jobId)
-    await supabase.rpc('log_pipeline_event', { 
-      p_job_id: jobId, 
-      p_event_type: 'job_completed', 
-      p_stage: 'completed', 
-      p_message: 'Job completed successfully with Firecrawl', 
-      p_metadata: { sentiment: sentiment.type, keywords_count: keywords.length } 
-    })
-
-    console.log(`Job ${jobId} completed successfully`)
-  } catch (err) {
-    const error = err as Error
-    console.error(`Error processing job ${jobId}:`, error)
-    await supabase.from('ingestion_jobs').update({ status: 'failed', error_message: error.message }).eq('id', jobId)
-    await supabase.rpc('log_pipeline_event', { p_job_id: jobId, p_event_type: 'job_failed', p_stage: 'error', p_message: `Job failed: ${error.message}` })
+    throw new Error('Failed to parse NLP response')
+  } catch (error) {
+    console.error('NLP analysis error:', error)
+    return fallbackNLP(content, platform)
   }
 }
 
-// Simple sentiment analysis based on keyword matching
-function analyzeSentiment(content: string): { type: 'positive' | 'negative' | 'neutral' | 'mixed', score: number } {
+// AI-powered OCR for image text extraction
+async function extractOCR(imageUrls: string[]): Promise<OCRResult> {
+  const lovableApiKey = Deno.env.get('LOVABLE_API_KEY')
+  
+  if (!lovableApiKey || imageUrls.length === 0) {
+    return { text: '', confidence: 0, regions: [] }
+  }
+
+  try {
+    console.log(`Performing OCR on ${imageUrls.length} images...`)
+    
+    // Use Gemini's vision capabilities for OCR
+    const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${lovableApiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'google/gemini-2.5-flash',
+        messages: [
+          {
+            role: 'user',
+            content: [
+              {
+                type: 'text',
+                text: `Extract ALL text visible in these images. Provide OCR results as JSON with this format:
+{
+  "text": "all extracted text combined",
+  "confidence": overall confidence 0-1,
+  "regions": [{"text": "text from region", "confidence": 0-1}]
+}
+Only respond with valid JSON.`
+              },
+              ...imageUrls.slice(0, 5).map(url => ({
+                type: 'image_url' as const,
+                image_url: { url }
+              }))
+            ]
+          }
+        ]
+      })
+    })
+
+    if (!response.ok) {
+      console.error('OCR error:', response.status)
+      return { text: '', confidence: 0, regions: [] }
+    }
+
+    const data = await response.json()
+    const content = data.choices?.[0]?.message?.content
+
+    if (content) {
+      const jsonMatch = content.match(/\{[\s\S]*\}/)
+      if (jsonMatch) {
+        return JSON.parse(jsonMatch[0]) as OCRResult
+      }
+    }
+
+    return { text: '', confidence: 0, regions: [] }
+  } catch (error) {
+    console.error('OCR extraction error:', error)
+    return { text: '', confidence: 0, regions: [] }
+  }
+}
+
+// Fallback NLP when AI is unavailable
+function fallbackNLP(content: string, platform: string): NLPResult {
   const lowerContent = content.toLowerCase()
   
-  const positiveWords = ['great', 'excellent', 'amazing', 'wonderful', 'fantastic', 'love', 'best', 'awesome', 'good', 'happy', 'success', 'innovative', 'breakthrough']
-  const negativeWords = ['bad', 'terrible', 'awful', 'horrible', 'hate', 'worst', 'poor', 'disappointing', 'failure', 'problem', 'issue', 'crisis', 'concern']
+  // Simple sentiment
+  const positiveWords = ['great', 'excellent', 'amazing', 'wonderful', 'fantastic', 'love', 'best', 'awesome', 'good', 'happy', 'success']
+  const negativeWords = ['bad', 'terrible', 'awful', 'horrible', 'hate', 'worst', 'poor', 'disappointing', 'failure', 'problem']
   
   let positiveCount = 0
   let negativeCount = 0
@@ -219,18 +357,14 @@ function analyzeSentiment(content: string): { type: 'positive' | 'negative' | 'n
   })
   
   const total = positiveCount + negativeCount
-  if (total === 0) return { type: 'neutral', score: 0 }
+  const score = total === 0 ? 0 : (positiveCount - negativeCount) / total
   
-  const score = (positiveCount - negativeCount) / total
-  
-  if (score > 0.3) return { type: 'positive', score: Math.min(score, 1) }
-  if (score < -0.3) return { type: 'negative', score: Math.max(score, -1) }
-  if (positiveCount > 0 && negativeCount > 0) return { type: 'mixed', score }
-  return { type: 'neutral', score }
-}
+  let sentimentType: 'positive' | 'negative' | 'neutral' | 'mixed' = 'neutral'
+  if (score > 0.3) sentimentType = 'positive'
+  else if (score < -0.3) sentimentType = 'negative'
+  else if (positiveCount > 0 && negativeCount > 0) sentimentType = 'mixed'
 
-// Extract keywords from content
-function extractKeywords(content: string): string[] {
+  // Simple keyword extraction
   const words = content.toLowerCase()
     .replace(/[^\w\s]/g, '')
     .split(/\s+/)
@@ -245,51 +379,186 @@ function extractKeywords(content: string): string[] {
     }
   })
   
-  return Object.entries(wordCount)
+  const keywords = Object.entries(wordCount)
     .sort((a, b) => b[1] - a[1])
     .slice(0, 10)
     .map(([word]) => word)
-}
 
-// Extract topics based on platform and content
-function extractTopics(content: string, platform: string): string[] {
+  // Simple topic detection
   const topics: string[] = [platform.charAt(0).toUpperCase() + platform.slice(1)]
-  const lowerContent = content.toLowerCase()
-  
   const topicMap: Record<string, string[]> = {
-    'technology': ['tech', 'software', 'hardware', 'digital', 'computer', 'programming', 'code', 'developer'],
-    'business': ['business', 'company', 'market', 'finance', 'investment', 'startup', 'enterprise'],
-    'science': ['science', 'research', 'study', 'discovery', 'experiment', 'data'],
-    'health': ['health', 'medical', 'healthcare', 'medicine', 'wellness', 'fitness'],
-    'politics': ['politics', 'government', 'policy', 'election', 'vote', 'congress'],
-    'entertainment': ['entertainment', 'movie', 'music', 'game', 'celebrity', 'streaming'],
+    'Technology': ['tech', 'software', 'hardware', 'digital', 'computer', 'programming', 'code', 'developer', 'ai', 'machine learning'],
+    'Business': ['business', 'company', 'market', 'finance', 'investment', 'startup', 'enterprise', 'revenue'],
+    'Science': ['science', 'research', 'study', 'discovery', 'experiment', 'data', 'hypothesis'],
+    'Health': ['health', 'medical', 'healthcare', 'medicine', 'wellness', 'fitness', 'doctor'],
+    'Politics': ['politics', 'government', 'policy', 'election', 'vote', 'congress', 'president'],
+    'Entertainment': ['entertainment', 'movie', 'music', 'game', 'celebrity', 'streaming', 'film'],
   }
   
   Object.entries(topicMap).forEach(([topic, keywords]) => {
     if (keywords.some(kw => lowerContent.includes(kw))) {
-      topics.push(topic.charAt(0).toUpperCase() + topic.slice(1))
+      topics.push(topic)
     }
   })
-  
-  return topics.slice(0, 5)
+
+  return {
+    sentiment: { type: sentimentType, score, confidence: 0.5 },
+    entities: [],
+    topics: topics.slice(0, 5),
+    keywords,
+    language: { code: 'en', name: 'English', confidence: 0.8 },
+    summary: content.slice(0, 300) + '...'
+  }
 }
 
-// Extract entities from metadata
 // deno-lint-ignore no-explicit-any
-function extractEntities(metadata: any): Array<{ type: string, name: string, confidence: number }> {
-  const entities: Array<{ type: string, name: string, confidence: number }> = []
+async function processJob(supabase: any, jobId: string, sourceUrl: string, platform: string) {
+  const firecrawlApiKey = Deno.env.get('FIRECRAWL_API_KEY')
   
-  if (metadata.title) {
-    entities.push({ type: 'title', name: metadata.title, confidence: 1.0 })
+  if (!firecrawlApiKey) {
+    console.error('FIRECRAWL_API_KEY not configured')
+    await supabase.from('ingestion_jobs').update({ status: 'failed', error_message: 'Firecrawl API key not configured' }).eq('id', jobId)
+    await supabase.rpc('log_pipeline_event', { p_job_id: jobId, p_event_type: 'job_failed', p_stage: 'error', p_message: 'Firecrawl API key not configured' })
+    return
   }
-  
-  if (metadata.ogSiteName) {
-    entities.push({ type: 'organization', name: metadata.ogSiteName, confidence: 0.9 })
+
+  try {
+    console.log(`Starting ingestion pipeline for job ${jobId}: ${sourceUrl}`)
+
+    // Stage 1: Ingesting
+    await supabase.from('ingestion_jobs').update({ status: 'ingesting', started_at: new Date().toISOString(), progress: 10 }).eq('id', jobId)
+    await supabase.rpc('log_pipeline_event', { p_job_id: jobId, p_event_type: 'status_change', p_stage: 'ingestion', p_message: 'Started Firecrawl content scraping' })
+
+    // Scrape with Firecrawl
+    const firecrawl = new FirecrawlApp({ apiKey: firecrawlApiKey })
+    
+    const scrapeResult = await firecrawl.scrape(sourceUrl, {
+      formats: ['markdown', 'html', 'links', 'screenshot'],
+      onlyMainContent: true,
+      waitFor: 2000,
+    })
+
+    if (!scrapeResult.success) {
+      throw new Error(`Firecrawl scrape failed: ${scrapeResult.error || 'Unknown error'}`)
+    }
+
+    console.log(`Firecrawl scrape successful for job ${jobId}`)
+    const content = scrapeResult.markdown || scrapeResult.html || ''
+    const metadata = scrapeResult.metadata || {}
+
+    // Store raw content
+    await supabase.from('ingestion_jobs').update({ 
+      status: 'processing', 
+      progress: 30,
+      raw_content: content
+    }).eq('id', jobId)
+    
+    await supabase.rpc('log_pipeline_event', { 
+      p_job_id: jobId, 
+      p_event_type: 'status_change', 
+      p_stage: 'processing', 
+      p_message: 'Content scraped, starting AI-powered NLP analysis',
+      p_metadata: { content_length: content.length, links_found: (scrapeResult.links || []).length }
+    })
+
+    // Stage 2: NLP Analysis
+    await supabase.from('ingestion_jobs').update({ status: 'processing', progress: 50 }).eq('id', jobId)
+    await supabase.rpc('log_pipeline_event', { p_job_id: jobId, p_event_type: 'nlp_started', p_stage: 'processing', p_message: 'Running NLP: sentiment, entities, topics, language detection' })
+
+    const nlpResult = await analyzeWithNLP(content, platform)
+    console.log('NLP analysis complete:', { sentiment: nlpResult.sentiment.type, entities: nlpResult.entities.length, topics: nlpResult.topics })
+
+    await supabase.rpc('log_pipeline_event', { 
+      p_job_id: jobId, 
+      p_event_type: 'nlp_completed', 
+      p_stage: 'processing', 
+      p_message: `NLP complete: ${nlpResult.sentiment.type} sentiment, ${nlpResult.entities.length} entities, ${nlpResult.topics.length} topics`,
+      p_metadata: { sentiment: nlpResult.sentiment, language: nlpResult.language }
+    })
+
+    // Stage 3: OCR (if images present)
+    await supabase.from('ingestion_jobs').update({ status: 'enriching', progress: 70 }).eq('id', jobId)
+    
+    // Extract image URLs from scraped content
+    const imageUrls: string[] = []
+    if (metadata.ogImage) imageUrls.push(metadata.ogImage)
+    if (scrapeResult.screenshot) imageUrls.push(scrapeResult.screenshot)
+    
+    // Extract image URLs from links
+    const links = scrapeResult.links || []
+    links.forEach((link: string) => {
+      if (/\.(jpg|jpeg|png|gif|webp)$/i.test(link)) {
+        imageUrls.push(link)
+      }
+    })
+
+    let ocrResult: OCRResult = { text: '', confidence: 0, regions: [] }
+    
+    if (imageUrls.length > 0) {
+      await supabase.rpc('log_pipeline_event', { p_job_id: jobId, p_event_type: 'ocr_started', p_stage: 'enrichment', p_message: `Running OCR on ${imageUrls.length} images` })
+      
+      ocrResult = await extractOCR(imageUrls)
+      
+      if (ocrResult.text) {
+        await supabase.rpc('log_pipeline_event', { 
+          p_job_id: jobId, 
+          p_event_type: 'ocr_completed', 
+          p_stage: 'enrichment', 
+          p_message: `OCR extracted ${ocrResult.text.length} characters`,
+          p_metadata: { confidence: ocrResult.confidence, regions: ocrResult.regions.length }
+        })
+      }
+    } else {
+      await supabase.rpc('log_pipeline_event', { p_job_id: jobId, p_event_type: 'ocr_skipped', p_stage: 'enrichment', p_message: 'No images found for OCR' })
+    }
+
+    // Stage 4: Store insights
+    await supabase.from('ingestion_jobs').update({ progress: 90 }).eq('id', jobId)
+    
+    await supabase.from('insights').insert({
+      job_id: jobId,
+      sentiment: nlpResult.sentiment.type,
+      sentiment_score: nlpResult.sentiment.score,
+      summary: nlpResult.summary || metadata.description || content.slice(0, 500),
+      keywords: nlpResult.keywords,
+      topics: nlpResult.topics,
+      entities: nlpResult.entities,
+      language: nlpResult.language.code,
+      ocr_text: ocrResult.text || null,
+      confidence_scores: {
+        sentiment: nlpResult.sentiment.confidence,
+        language: nlpResult.language.confidence,
+        ocr: ocrResult.confidence
+      },
+      engagement_metrics: { 
+        links_found: (scrapeResult.links || []).length,
+        content_length: content.length,
+        images_processed: imageUrls.length,
+        source_title: metadata.title || 'Unknown'
+      }
+    })
+
+    // Mark as completed
+    await supabase.from('ingestion_jobs').update({ status: 'completed', progress: 100, completed_at: new Date().toISOString() }).eq('id', jobId)
+    await supabase.rpc('log_pipeline_event', { 
+      p_job_id: jobId, 
+      p_event_type: 'job_completed', 
+      p_stage: 'completed', 
+      p_message: 'Pipeline completed with AI-powered NLP and OCR', 
+      p_metadata: { 
+        sentiment: nlpResult.sentiment.type, 
+        entities_count: nlpResult.entities.length,
+        keywords_count: nlpResult.keywords.length,
+        ocr_extracted: ocrResult.text.length > 0,
+        language: nlpResult.language.code
+      } 
+    })
+
+    console.log(`Job ${jobId} completed successfully with NLP and OCR`)
+  } catch (err) {
+    const error = err as Error
+    console.error(`Error processing job ${jobId}:`, error)
+    await supabase.from('ingestion_jobs').update({ status: 'failed', error_message: error.message }).eq('id', jobId)
+    await supabase.rpc('log_pipeline_event', { p_job_id: jobId, p_event_type: 'job_failed', p_stage: 'error', p_message: `Job failed: ${error.message}` })
   }
-  
-  if (metadata.author) {
-    entities.push({ type: 'person', name: metadata.author, confidence: 0.85 })
-  }
-  
-  return entities
 }
