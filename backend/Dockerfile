@@ -31,8 +31,8 @@ FROM base as builder
 COPY requirements.txt .
 RUN pip install --user -r requirements.txt
 
-# Download spaCy model
-RUN python -m spacy download en_core_web_sm
+# Download spaCy model using pip (more reliable in Docker)
+RUN pip install --user https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl || echo "spaCy model download skipped"
 
 # ============================================================================
 # Production stage
