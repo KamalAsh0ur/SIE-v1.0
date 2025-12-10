@@ -1,10 +1,9 @@
 import { useState } from "react";
 import { useInsights } from "@/hooks/useDashboardData";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loader2, Search, Filter, TrendingUp, TrendingDown, Minus, ExternalLink, Tag } from "lucide-react";
+import { Loader2, Search, Filter, TrendingUp, TrendingDown, Minus, ExternalLink, Tag, Globe, FileText } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 
 const sentimentConfig = {
@@ -177,17 +176,41 @@ export default function Insights() {
                   <div className="mt-3 pt-3 border-t border-border">
                     <p className="text-xs text-muted-foreground mb-2">Entities:</p>
                     <div className="flex flex-wrap gap-2">
-                      {insight.entities.map((entity, i) => (
+                      {insight.entities.map((entity: { name: string; type: string; confidence?: number }, i: number) => (
                         <span 
                           key={i} 
                           className="text-xs px-2 py-1 rounded bg-primary/10 text-primary"
                         >
                           {entity.name} ({entity.type})
+                          {entity.confidence && (
+                            <span className="ml-1 opacity-60">{Math.round(entity.confidence * 100)}%</span>
+                          )}
                         </span>
                       ))}
                     </div>
                   </div>
                 )}
+
+                {/* Language & OCR */}
+                <div className="mt-3 pt-3 border-t border-border flex flex-wrap gap-4">
+                  {insight.language && (
+                    <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                      <Globe className="w-3 h-3" />
+                      <span>Language: {insight.language.toUpperCase()}</span>
+                    </div>
+                  )}
+                  {insight.ocr_text && (
+                    <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                      <FileText className="w-3 h-3" />
+                      <span>OCR: {insight.ocr_text.length} chars extracted</span>
+                    </div>
+                  )}
+                  {insight.confidence_scores && (
+                    <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                      <span>Confidence: {Math.round(((insight.confidence_scores as { sentiment?: number })?.sentiment || 0) * 100)}%</span>
+                    </div>
+                  )}
+                </div>
               </div>
             );
           })}

@@ -29,6 +29,8 @@ export interface Insight {
   topics: string[]
   engagement_metrics: Record<string, unknown>
   language: string
+  ocr_text: string | null
+  confidence_scores: Record<string, number> | null
   created_at: string
   ingestion_jobs?: IngestionJob
 }
