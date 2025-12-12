@@ -543,14 +543,59 @@ async function processJob(supabase: any, jobId: string, sourceUrl: string, platf
     // Scrape with Firecrawl
     const firecrawl = new FirecrawlApp({ apiKey: firecrawlApiKey })
     
-    const scrapeResult = await firecrawl.scrape(sourceUrl, {
-      formats: ['markdown', 'html', 'links', 'screenshot'],
-      onlyMainContent: true,
-      waitFor: 2000,
-    })
+    // Check for known unsupported sites
+    const blockedDomains = ['reddit.com', 'twitter.com', 'x.com', 'facebook.com', 'instagram.com', 'linkedin.com']
+    const urlLower = sourceUrl.toLowerCase()
+    const blockedDomain = blockedDomains.find(d => urlLower.includes(d))
+    
+    if (blockedDomain) {
+      console.warn(`Warning: ${blockedDomain} may require Firecrawl enterprise plan or have anti-scraping protection`)
+      await supabase.rpc('log_pipeline_event', { 
+        p_job_id: jobId, 
+        p_event_type: 'warning', 
+        p_stage: 'ingestion', 
+        p_message: `Site ${blockedDomain} may have scraping restrictions. Attempting anyway...` 
+      })
+    }
+    
+    let scrapeResult
+    try {
+      scrapeResult = await firecrawl.scrape(sourceUrl, {
+        formats: ['markdown', 'html', 'links'],
+        onlyMainContent: true,
+        waitFor: 3000,
+      })
+    } catch (scrapeError) {
+      const err = scrapeError as Error
+      const errorMsg = err.message || 'Unknown scraping error'
+      
+      // Provide helpful error messages for common failures
+      let helpfulError = errorMsg
+      if (blockedDomain) {
+        helpfulError = `${blockedDomain} is blocked or requires enterprise access. Try a different URL.`
+      } else if (errorMsg.includes('rate limit')) {
+        helpfulError = 'Firecrawl rate limit exceeded. Wait a few minutes and retry.'
+      } else if (errorMsg.includes('timeout')) {
+        helpfulError = 'Request timed out. The target site may be slow or blocking requests.'
+      }
+      
+      throw new Error(`Scraping failed: ${helpfulError}`)
+    }
 
-    if (!scrapeResult.success) {
-      throw new Error(`Firecrawl scrape failed: ${scrapeResult.error || 'Unknown error'}`)
+    if (!scrapeResult || !scrapeResult.success) {
+      const errorDetail = scrapeResult?.error || 'No response from Firecrawl'
+      
+      // Check for specific error types
+      if (typeof errorDetail === 'string') {
+        if (errorDetail.includes('not currently supported')) {
+          throw new Error(`Site not supported: ${sourceUrl}. This domain requires Firecrawl enterprise plan.`)
+        }
+        if (errorDetail.includes('blocked') || errorDetail.includes('403')) {
+          throw new Error(`Access blocked: ${sourceUrl}. The site has anti-scraping protection.`)
+        }
+      }
+      
+      throw new Error(`Firecrawl error: ${errorDetail}`)
     }
 
     console.log(`Firecrawl scrape successful for job ${jobId}`)
