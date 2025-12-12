@@ -1,6 +1,14 @@
-import { Search, Bell, RefreshCw } from "lucide-react";
+import { Search, Bell, RefreshCw, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { useAuth } from "@/hooks/useAuth";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 
 interface HeaderProps {
   title: string;
@@ -8,6 +16,10 @@ interface HeaderProps {
 }
 
 export const Header = ({ title, subtitle }: HeaderProps) => {
+  const { user, signOut } = useAuth();
+
+  const userInitial = user?.email?.charAt(0).toUpperCase() || "U";
+
   return (
     <header className="h-16 border-b border-border bg-background/80 backdrop-blur-xl sticky top-0 z-40 flex items-center justify-between px-6">
       <div>
@@ -41,6 +53,28 @@ export const Header = ({ title, subtitle }: HeaderProps) => {
         <Badge variant="outline" className="text-xs">
           v1.0.0
         </Badge>
+
+        {/* User Menu */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="icon" className="rounded-full">
+              <Avatar className="h-8 w-8">
+                <AvatarFallback className="bg-primary text-primary-foreground text-sm">
+                  {userInitial}
+                </AvatarFallback>
+              </Avatar>
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-48">
+            <div className="px-2 py-1.5 text-sm text-muted-foreground truncate">
+              {user?.email}
+            </div>
+            <DropdownMenuItem onClick={signOut} className="text-destructive focus:text-destructive">
+              <LogOut className="w-4 h-4 mr-2" />
+              Sign out
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
     </header>
   );
