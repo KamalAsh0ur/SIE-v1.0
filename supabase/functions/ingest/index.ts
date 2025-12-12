@@ -1,5 +1,51 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import FirecrawlApp from 'https://esm.sh/@mendable/firecrawl-js@4.8.1?bundle-deps&no-dts'
+
+// Direct Firecrawl API scraper (more reliable than SDK in Deno)
+async function scrapeWithFirecrawl(url: string, apiKey: string): Promise<{
+  success: boolean
+  markdown?: string
+  html?: string
+  links?: string[]
+  metadata?: Record<string, unknown>
+  error?: string
+}> {
+  console.log(`Calling Firecrawl API for: ${url}`)
+  
+  const response = await fetch('https://api.firecrawl.dev/v1/scrape', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      url,
+      formats: ['markdown', 'html', 'links'],
+      onlyMainContent: true,
+      waitFor: 3000,
+    }),
+  })
+
+  const data = await response.json()
+  console.log(`Firecrawl API response status: ${response.status}`)
+  
+  if (!response.ok) {
+    console.error('Firecrawl API error:', JSON.stringify(data))
+    return { 
+      success: false, 
+      error: data.error || data.message || `HTTP ${response.status}: ${response.statusText}` 
+    }
+  }
+
+  // Firecrawl v1 API returns data nested in 'data' object
+  const result = data.data || data
+  return {
+    success: true,
+    markdown: result.markdown,
+    html: result.html,
+    links: result.links,
+    metadata: result.metadata,
+  }
+}
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -540,9 +586,7 @@ async function processJob(supabase: any, jobId: string, sourceUrl: string, platf
     await supabase.from('ingestion_jobs').update({ status: 'ingesting', started_at: new Date().toISOString(), progress: 10 }).eq('id', jobId)
     await supabase.rpc('log_pipeline_event', { p_job_id: jobId, p_event_type: 'status_change', p_stage: 'ingestion', p_message: 'Started Firecrawl content scraping' })
 
-    // Scrape with Firecrawl
-    const firecrawl = new FirecrawlApp({ apiKey: firecrawlApiKey })
-    
+    // Scrape with Firecrawl REST API (direct call, more reliable than SDK)
     // Check for known unsupported sites
     const blockedDomains = ['reddit.com', 'twitter.com', 'x.com', 'facebook.com', 'instagram.com', 'linkedin.com']
     const urlLower = sourceUrl.toLowerCase()
@@ -558,44 +602,24 @@ async function processJob(supabase: any, jobId: string, sourceUrl: string, platf
       })
     }
     
-    let scrapeResult
-    try {
-      scrapeResult = await firecrawl.scrape(sourceUrl, {
-        formats: ['markdown', 'html', 'links'],
-        onlyMainContent: true,
-        waitFor: 3000,
-      })
-    } catch (scrapeError) {
-      const err = scrapeError as Error
-      const errorMsg = err.message || 'Unknown scraping error'
+    const scrapeResult = await scrapeWithFirecrawl(sourceUrl, firecrawlApiKey)
+
+    if (!scrapeResult.success) {
+      const errorDetail = scrapeResult.error || 'Unknown Firecrawl error'
       
-      // Provide helpful error messages for common failures
-      let helpfulError = errorMsg
-      if (blockedDomain) {
+      // Provide helpful error messages
+      let helpfulError = errorDetail
+      if (blockedDomain && (errorDetail.includes('blocked') || errorDetail.includes('403'))) {
         helpfulError = `${blockedDomain} is blocked or requires enterprise access. Try a different URL.`
-      } else if (errorMsg.includes('rate limit')) {
+      } else if (errorDetail.includes('rate limit')) {
         helpfulError = 'Firecrawl rate limit exceeded. Wait a few minutes and retry.'
-      } else if (errorMsg.includes('timeout')) {
+      } else if (errorDetail.includes('timeout')) {
         helpfulError = 'Request timed out. The target site may be slow or blocking requests.'
+      } else if (errorDetail.includes('401') || errorDetail.includes('Unauthorized')) {
+        helpfulError = 'Invalid Firecrawl API key. Please check your FIRECRAWL_API_KEY secret.'
       }
       
       throw new Error(`Scraping failed: ${helpfulError}`)
-    }
-
-    if (!scrapeResult || !scrapeResult.success) {
-      const errorDetail = scrapeResult?.error || 'No response from Firecrawl'
-      
-      // Check for specific error types
-      if (typeof errorDetail === 'string') {
-        if (errorDetail.includes('not currently supported')) {
-          throw new Error(`Site not supported: ${sourceUrl}. This domain requires Firecrawl enterprise plan.`)
-        }
-        if (errorDetail.includes('blocked') || errorDetail.includes('403')) {
-          throw new Error(`Access blocked: ${sourceUrl}. The site has anti-scraping protection.`)
-        }
-      }
-      
-      throw new Error(`Firecrawl error: ${errorDetail}`)
     }
 
     console.log(`Firecrawl scrape successful for job ${jobId}`)
@@ -637,8 +661,8 @@ async function processJob(supabase: any, jobId: string, sourceUrl: string, platf
     
     // Extract image URLs from scraped content
     const imageUrls: string[] = []
-    if (metadata.ogImage) imageUrls.push(metadata.ogImage)
-    if (scrapeResult.screenshot) imageUrls.push(scrapeResult.screenshot)
+    const ogImage = metadata.ogImage as string | undefined
+    if (ogImage) imageUrls.push(ogImage)
     
     // Extract image URLs from links
     const links = scrapeResult.links || []
