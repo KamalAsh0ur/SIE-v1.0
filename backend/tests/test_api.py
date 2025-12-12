@@ -12,6 +12,9 @@ from app.main import app
 
 client = TestClient(app)
 
+# API key header for authenticated requests
+AUTH_HEADERS = {"X-API-Key": "dev-api-key-12345"}
+
 
 # ============================================================================
 # Health Check Tests
@@ -55,7 +58,7 @@ class TestIngestion:
             "priority": "normal"
         }
         
-        response = client.post("/ingest", json=payload)
+        response = client.post("/ingest", json=payload, headers=AUTH_HEADERS)
         assert response.status_code == 201
         data = response.json()
         
@@ -76,7 +79,7 @@ class TestIngestion:
             "priority": "high"
         }
         
-        response = client.post("/ingest", json=payload)
+        response = client.post("/ingest", json=payload, headers=AUTH_HEADERS)
         assert response.status_code == 201
     
     def test_submit_invalid_job_no_content(self):
@@ -87,7 +90,7 @@ class TestIngestion:
             "mode": "realtime"
         }
         
-        response = client.post("/ingest", json=payload)
+        response = client.post("/ingest", json=payload, headers=AUTH_HEADERS)
         assert response.status_code == 400
     
     def test_submit_invalid_source_type(self):
@@ -98,8 +101,19 @@ class TestIngestion:
             "keywords": ["test"]
         }
         
-        response = client.post("/ingest", json=payload)
+        response = client.post("/ingest", json=payload, headers=AUTH_HEADERS)
         assert response.status_code == 422  # Validation error
+    
+    def test_submit_without_api_key(self):
+        """Test that submitting without API key returns 401."""
+        payload = {
+            "source_type": "scraped",
+            "tenant": "test-tenant",
+            "keywords": ["test"]
+        }
+        
+        response = client.post("/ingest", json=payload)
+        assert response.status_code == 401
 
 
 # ============================================================================
@@ -111,7 +125,7 @@ class TestJobs:
     
     def test_list_jobs(self):
         """Test listing jobs."""
-        response = client.get("/jobs")
+        response = client.get("/jobs", headers=AUTH_HEADERS)
         assert response.status_code == 200
         data = response.json()
         
@@ -121,13 +135,18 @@ class TestJobs:
     
     def test_list_jobs_with_filters(self):
         """Test listing jobs with filters."""
-        response = client.get("/jobs?status=pending&limit=10")
+        response = client.get("/jobs?status=pending&limit=10", headers=AUTH_HEADERS)
         assert response.status_code == 200
     
     def test_get_nonexistent_job(self):
         """Test getting a job that doesn't exist."""
-        response = client.get("/jobs/00000000-0000-0000-0000-000000000000")
+        response = client.get("/jobs/00000000-0000-0000-0000-000000000000", headers=AUTH_HEADERS)
         assert response.status_code == 404
+    
+    def test_list_jobs_without_api_key(self):
+        """Test that listing jobs without API key returns 401."""
+        response = client.get("/jobs")
+        assert response.status_code == 401
 
 
 # ============================================================================
@@ -139,7 +158,7 @@ class TestInsights:
     
     def test_get_insights_for_nonexistent_job(self):
         """Test getting insights for a job that doesn't exist."""
-        response = client.get("/insights/00000000-0000-0000-0000-000000000000")
+        response = client.get("/insights/00000000-0000-0000-0000-000000000000", headers=AUTH_HEADERS)
         assert response.status_code == 404
 
 
@@ -152,7 +171,7 @@ class TestEvents:
     
     def test_get_recent_events(self):
         """Test getting recent events."""
-        response = client.get("/events/recent")
+        response = client.get("/events/recent", headers=AUTH_HEADERS)
         assert response.status_code == 200
         data = response.json()
         assert "events" in data
@@ -176,12 +195,13 @@ class TestIntegration:
             "priority": "high"
         }
         
-        submit_response = client.post("/ingest", json=submit_payload)
+        submit_response = client.post("/ingest", json=submit_payload, headers=AUTH_HEADERS)
         assert submit_response.status_code == 201
         job_id = submit_response.json()["job_id"]
         
         # Check job status
-        status_response = client.get(f"/jobs/{job_id}/status")
+        status_response = client.get(f"/jobs/{job_id}/status", headers=AUTH_HEADERS)
         # Job might not exist in mock storage since we bypassed Celery
         # In production tests, this would be 200
         assert status_response.status_code in [200, 404]
+

@@ -47,7 +47,7 @@ async def search_insights(
     language: Optional[str] = Query(None, description="Filter by language"),
     exclude_spam: bool = Query(True, description="Exclude spam"),
     sort: Optional[str] = Query(None, description="Sort field (e.g., created_at:desc)"),
-    limit: int = Query(50, ge=1, le=200, description="Max results"),
+    limit: int = Query(50, ge=1, le=100, description="Max results"),
     offset: int = Query(0, ge=0, description="Results offset"),
     api_key: str = Depends(verify_api_key),
 ):

@@ -6,8 +6,20 @@ Load settings from environment variables with Pydantic.
 
 from functools import lru_cache
 from typing import Optional
+import warnings
 
+from pydantic import model_validator
 from pydantic_settings import BaseSettings
+
+
+# Default/example secrets that should NEVER be used in production
+INSECURE_SECRETS = {
+    "change-me-in-production",
+    "your-secret-key-here", 
+    "secret",
+    "password",
+    "changeme",
+}
 
 
 class Settings(BaseSettings):
@@ -40,6 +52,20 @@ class Settings(BaseSettings):
     # Sentry
     sentry_dsn: Optional[str] = None
 
+    # Database connection pool - for high concurrency
+    db_pool_size: int = 20
+    db_max_overflow: int = 30
+    db_pool_timeout: int = 30
+    db_pool_recycle: int = 1800  # Recycle connections after 30 minutes
+
+    # Redis cluster support
+    redis_cluster_mode: bool = False
+    redis_cluster_nodes: Optional[str] = None  # Comma-separated list for cluster
+
+    # Rate limiting
+    rate_limit_enabled: bool = True
+    rate_limit_default: int = 100  # Jobs per minute per tenant
+
     # NLP Settings
     nlp_model: str = "en_core_web_sm"
     nlp_batch_size: int = 100
@@ -67,6 +93,25 @@ class Settings(BaseSettings):
 
     # Rate Limiting
     rate_limit_per_minute: int = 60
+    
+    # Memory management
+    job_ttl_hours: int = 24  # Hours to keep jobs in memory before cleanup
+
+    @model_validator(mode='after')
+    def validate_production_secrets(self):
+        """Validate that production doesn't use insecure default secrets."""
+        if self.environment == "production" or not self.debug:
+            if self.api_secret_key in INSECURE_SECRETS:
+                raise ValueError(
+                    "SECURITY ERROR: API_SECRET_KEY must be changed from default value in production! "
+                    "Generate a secure key with: openssl rand -hex 32"
+                )
+        elif self.api_secret_key in INSECURE_SECRETS:
+            warnings.warn(
+                "⚠️  Using default API_SECRET_KEY. Change this before deploying to production!",
+                UserWarning
+            )
+        return self
 
     class Config:
         env_file = ".env"

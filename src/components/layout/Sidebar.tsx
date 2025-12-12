@@ -1,12 +1,12 @@
 import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
-import { 
-  LayoutDashboard, 
-  Inbox, 
-  TrendingUp, 
-  Database, 
-  Settings, 
+import {
+  LayoutDashboard,
+  Inbox,
+  TrendingUp,
+  Database,
+  Settings,
   Code2,
   ChevronLeft,
   Zap,
@@ -35,7 +35,7 @@ export const Sidebar = ({ activeSection, onSectionChange }: SidebarProps) => {
         .from('ingestion_jobs')
         .select('*', { count: 'exact', head: true })
         .in('status', ['pending', 'ingesting', 'processing', 'enriching']);
-      
+
       setProcessingCount(count || 0);
     };
 
@@ -67,7 +67,7 @@ export const Sidebar = ({ activeSection, onSectionChange }: SidebarProps) => {
   ];
 
   return (
-    <aside 
+    <aside
       className={cn(
         "fixed left-0 top-0 h-screen bg-sidebar border-r border-sidebar-border flex flex-col transition-all duration-300 z-50",
         isCollapsed ? "w-16" : "w-64"
@@ -76,8 +76,12 @@ export const Sidebar = ({ activeSection, onSectionChange }: SidebarProps) => {
       {/* Logo */}
       <div className="h-16 flex items-center px-4 border-b border-sidebar-border">
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-primary to-blue-500 flex items-center justify-center shadow-lg shadow-primary/30">
-            <Zap className="w-5 h-5 text-primary-foreground" />
+          <div className="w-9 h-9 rounded-xl overflow-hidden flex items-center justify-center shadow-lg">
+            <img
+              src="/logo.png"
+              alt="SIE Logo"
+              className="w-full h-full object-contain"
+            />
           </div>
           {!isCollapsed && (
             <div className="animate-fade-in">
@@ -93,15 +97,15 @@ export const Sidebar = ({ activeSection, onSectionChange }: SidebarProps) => {
         {navItems.map((item) => {
           const Icon = item.icon;
           const isActive = activeSection === item.id;
-          
+
           return (
             <button
               key={item.id}
               onClick={() => onSectionChange(item.id)}
               className={cn(
                 "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200 group relative",
-                isActive 
-                  ? "bg-primary/10 text-primary" 
+                isActive
+                  ? "bg-primary/10 text-primary"
                   : "text-muted-foreground hover:bg-secondary hover:text-foreground"
               )}
             >

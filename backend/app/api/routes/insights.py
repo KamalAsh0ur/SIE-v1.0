@@ -163,7 +163,7 @@ def get_insights_for_job(job_id: str) -> List[dict]:
 async def get_insights(
     job_id: str,
     page: int = Query(1, ge=1, description="Page number"),
-    limit: int = Query(50, ge=1, le=200, description="Items per page"),
+    limit: int = Query(50, ge=1, le=100, description="Items per page"),
     sentiment: Optional[SentimentType] = Query(None, description="Filter by sentiment"),
     topic: Optional[str] = Query(None, description="Filter by topic"),
     language: Optional[str] = Query(None, description="Filter by language"),

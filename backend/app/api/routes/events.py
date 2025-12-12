@@ -100,6 +100,20 @@ def unsubscribe_global(queue: asyncio.Queue):
         _global_subscribers.remove(queue)
 
 
+def cleanup_empty_subscriptions():
+    """Clean up job subscriptions with no queues to prevent memory leaks."""
+    empty_jobs = [job_id for job_id, queues in _event_subscribers.items() if not queues]
+    for job_id in empty_jobs:
+        del _event_subscribers[job_id]
+
+
+def cleanup_all_subscribers():
+    """Clean up all subscribers on shutdown."""
+    _event_subscribers.clear()
+    _global_subscribers.clear()
+    print("✓ Event subscribers cleaned up")
+
+
 # ============================================================================
 # SSE Generator
 # ============================================================================
@@ -208,7 +222,7 @@ async def stream_events(
 @router.get("/recent")
 async def get_recent_events(
     job_id: Optional[str] = Query(None, description="Filter by job ID"),
-    limit: int = Query(50, ge=1, le=200, description="Max events to return"),
+    limit: int = Query(50, ge=1, le=100, description="Max events to return"),
     api_key: str = Depends(verify_api_key),
 ):
     """

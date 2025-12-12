@@ -160,7 +160,50 @@ async def list_jobs(
     
     Supports pagination and filtering by tenant, status, source type, and priority.
     """
-    # Build filtered job list
+    offset = (page - 1) * limit
+    
+    # Try database first
+    try:
+        from app.db.service import get_db_service
+        db = await get_db_service()
+        jobs, total = await db.list_jobs(
+            tenant=tenant,
+            status=status.value if status else None,
+            limit=limit,
+            offset=offset,
+        )
+        
+        if jobs:
+            # Convert database rows to summaries
+            job_summaries = [
+                JobSummary(
+                    job_id=str(j.get("id", j.get("job_id", ""))),
+                    tenant=j.get("tenant", ""),
+                    source_type=j.get("source_type", "scraped"),
+                    status=JobStatus(j.get("status", "pending")),
+                    priority=JobPriority(j.get("priority", "normal")),
+                    items_total=j.get("items_total", 0),
+                    items_processed=j.get("items_processed", 0),
+                    created_at=str(j.get("created_at", "")),
+                    updated_at=str(j.get("updated_at", "")),
+                    error_message=j.get("error_message"),
+                )
+                for j in jobs
+            ]
+            
+            return JobListResponse(
+                jobs=job_summaries,
+                pagination={
+                    "page": page,
+                    "limit": limit,
+                    "total": total,
+                    "total_pages": (total + limit - 1) // limit if total > 0 else 0,
+                }
+            )
+    except Exception as e:
+        print(f"Database query failed, using in-memory: {e}")
+    
+    # Fallback to in-memory storage
     filtered_jobs = list(_mock_jobs.values())
     
     if tenant:

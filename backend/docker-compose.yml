@@ -31,19 +31,20 @@ services:
     restart: unless-stopped
 
   # ===========================================================================
-  # Celery Worker
+  # Celery Workers - Specialized per Queue for Scalability
   # ===========================================================================
-  worker:
+
+  # Ingestion workers (I/O-bound, high concurrency)
+  worker-ingestion:
     build:
       context: .
       target: worker
+    command: celery -A app.workers.celery_app worker -Q ingestion --concurrency=8 --autoscale=16,2 -n ingestion@%h
     environment:
       - DATABASE_URL=postgresql://postgres:postgres@db:5432/sie
       - REDIS_URL=redis://redis:6379
       - MEILISEARCH_URL=http://meilisearch:7700
-      - ENVIRONMENT=development
-    volumes:
-      - .:/app
+      - ENVIRONMENT=production
     depends_on:
       - db
       - redis
@@ -51,23 +52,78 @@ services:
       - sie-network
     restart: unless-stopped
     deploy:
-      replicas: 2 # Run 2 workers
+      replicas: 4
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 512M
+
+  # NLP workers (CPU-bound, fewer but more powerful)
+  worker-nlp:
+    build:
+      context: .
+      target: worker
+    command: celery -A app.workers.celery_app worker -Q nlp --concurrency=4 -n nlp@%h
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/sie
+      - REDIS_URL=redis://redis:6379
+      - ENVIRONMENT=production
+    depends_on:
+      - db
+      - redis
+    networks:
+      - sie-network
+    restart: unless-stopped
+    deploy:
+      replicas: 2
+      resources:
+        limits:
+          memory: 2G
+          cpus: '2'
+        reservations:
+          memory: 1G
+
+  # OCR workers (memory-intensive, GPU-ready)
+  worker-ocr:
+    build:
+      context: .
+      target: worker
+    command: celery -A app.workers.celery_app worker -Q ocr --concurrency=2 -n ocr@%h
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/sie
+      - REDIS_URL=redis://redis:6379
+      - ENVIRONMENT=production
+      - OCR_PREPROCESS=true
+    depends_on:
+      - db
+      - redis
+    networks:
+      - sie-network
+    restart: unless-stopped
+    deploy:
+      replicas: 2
+      resources:
+        limits:
+          memory: 2G
+        reservations:
+          memory: 1G
 
   # ===========================================================================
-  # Celery Flower (Monitoring)
+  # Celery Flower (Monitoring Dashboard)
   # ===========================================================================
   flower:
     build:
       context: .
       target: production
-    command: celery -A app.workers.celery_app flower --port=5555
+    command: celery -A app.workers.celery_app flower --port=5555 --broker_api=redis://redis:6379
     ports:
       - "5555:5555"
     environment:
       - REDIS_URL=redis://redis:6379
+      - FLOWER_BASIC_AUTH=admin:sie-monitor-2024
     depends_on:
       - redis
-      - worker
     networks:
       - sie-network
     restart: unless-stopped

@@ -321,9 +321,9 @@ def normalize_and_store(job_id: str, tenant: str, items: List[dict]) -> List[dic
             
             # Provenance
             provenance=Provenance(
-                source_url=item.get("url", ""),
-                platform=item.get("platform", "unknown"),
-                fetch_method=item.get("fetch_method", "api"),
+                source_url=item.get("url") or "",  # Handle None values
+                platform=item.get("platform") or "unknown",
+                fetch_method=item.get("fetch_method") or "scraper",
                 fetched_at=now,
                 original_id=item.get("id"),
             ),

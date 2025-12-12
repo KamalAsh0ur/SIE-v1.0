@@ -1,0 +1,31 @@
+# Ignore virtual environments
+.venv/
+.venv-stable/
+venv/
+backend/.venv/
+
+# Ignore node_modules (will be installed by Vercel)
+node_modules/
+
+# Backend directory
+backend/
+
+# Git
+.git/
+
+# Cache and temp files
+__pycache__/
+*.pyc
+.pytest_cache/
+.coverage
+
+# Local env files
+.env.local
+.env*.local
+
+# IDE
+.idea/
+.vscode/
+
+# Docs (not needed for frontend)
+docs/

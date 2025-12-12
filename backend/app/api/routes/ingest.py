@@ -135,9 +135,51 @@ async def submit_ingestion_job(
             detail="Must provide at least one of: items, accounts, or keywords"
         )
     
+    # Check rate limit for tenant
+    try:
+        from app.core.rate_limiter import get_rate_limiter
+        from app.config import settings
+        
+        if settings.rate_limit_enabled:
+            rate_limiter = await get_rate_limiter()
+            is_allowed, rate_info = await rate_limiter.check_rate_limit(request.tenant)
+            
+            if not is_allowed:
+                raise HTTPException(
+                    status_code=429,
+                    detail=f"Rate limit exceeded. {rate_info['remaining']} requests remaining. Resets at {rate_info['reset_at']}",
+                    headers={
+                        "X-RateLimit-Limit": str(rate_info["limit"]),
+                        "X-RateLimit-Remaining": str(rate_info["remaining"]),
+                        "X-RateLimit-Reset": str(rate_info["reset_at"]),
+                    }
+                )
+    except ImportError:
+        pass  # Rate limiter not available, proceed without limiting
+    except Exception as e:
+        # Log but don't block if rate limiting fails
+        print(f"Rate limit check failed: {e}")
+    
     # Generate job ID
     job_id = str(uuid4())
     accepted_at = datetime.utcnow().isoformat()
+    
+    # Persist job to database
+    try:
+        from app.db.service import get_db_service
+        db = await get_db_service()
+        await db.create_job(
+            job_id=job_id,
+            tenant=request.tenant,
+            source_type=request.source_type,
+            mode=request.mode,
+            priority=request.priority,
+            accounts=request.accounts,
+            keywords=request.keywords,
+            date_range=request.date_range.model_dump() if request.date_range else None,
+        )
+    except Exception as e:
+        print(f"Job persistence warning (continuing): {e}")
     
     # Map priority to numeric value for Celery
     priority_map = {"low": 1, "normal": 5, "high": 10}

@@ -18,7 +18,7 @@ celery_app = Celery(
     include=["app.workers.tasks"],
 )
 
-# Celery configuration
+# Celery configuration - Optimized for production scalability
 celery_app.conf.update(
     # Task settings
     task_serializer="json",
@@ -27,10 +27,14 @@ celery_app.conf.update(
     timezone="UTC",
     enable_utc=True,
     
-    # Task execution
+    # Task execution - Optimized for high throughput
     task_acks_late=True,  # Tasks acknowledged after completion (safer)
     task_reject_on_worker_lost=True,
-    worker_prefetch_multiplier=1,  # One task at a time per worker
+    worker_prefetch_multiplier=4,  # Prefetch 4 tasks per worker for throughput
+    worker_concurrency=8,  # 8 concurrent tasks per worker process
+    
+    # Worker auto-scaling: min 2, max 16 workers per process
+    worker_autoscale=(16, 2),
     
     # Task time limits
     task_soft_time_limit=300,  # 5 minutes soft limit
@@ -38,15 +42,23 @@ celery_app.conf.update(
     
     # Result backend settings
     result_expires=86400,  # Results expire after 24 hours
+    result_extended=True,  # Store additional task metadata
     
     # Priority queue configuration
     task_default_priority=5,
     task_queue_max_priority=10,
     
-    # Retry settings
+    # Retry settings with exponential backoff
     task_default_retry_delay=60,  # 1 minute default retry delay
+    task_publish_retry=True,
+    task_publish_retry_policy={
+        'max_retries': 3,
+        'interval_start': 1,
+        'interval_step': 2,
+        'interval_max': 30,
+    },
     
-    # Dead letter queue for failed tasks
+    # Task routing for specialized workers
     task_routes={
         "app.workers.tasks.process_ingestion_job": {"queue": "ingestion"},
         "app.workers.tasks.run_nlp_analysis": {"queue": "nlp"},
@@ -56,6 +68,10 @@ celery_app.conf.update(
     # Monitoring
     worker_send_task_events=True,
     task_send_sent_event=True,
+    
+    # Connection pool for Redis
+    broker_pool_limit=20,
+    result_backend_max_retries=10,
 )
 
 # Optional: Configure priority queues

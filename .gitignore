@@ -53,3 +53,5 @@ htmlcov/
 
 # Archive folder (local development)
 archive/
+.vercel
+.env*.local
