@@ -52,6 +52,67 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-api-key',
 }
 
+// URL validation to prevent SSRF attacks
+function validateUrl(urlString: string): { valid: boolean; error?: string } {
+  try {
+    const url = new URL(urlString)
+    
+    // Only allow http/https protocols
+    if (!['http:', 'https:'].includes(url.protocol)) {
+      return { valid: false, error: 'Invalid protocol. Only HTTP/HTTPS allowed.' }
+    }
+    
+    // Block internal/private IP ranges (SSRF protection)
+    const hostname = url.hostname.toLowerCase()
+    const blockedPatterns = [
+      /^localhost$/i,
+      /^127\./,
+      /^10\./,
+      /^172\.(1[6-9]|2[0-9]|3[0-1])\./,
+      /^192\.168\./,
+      /^169\.254\./,
+      /^0\./,
+      /^\[::1\]$/,
+      /^\[fd/i,
+      /^\[fe80:/i,
+      /\.local$/i,
+      /\.internal$/i,
+      /\.localhost$/i,
+    ]
+    
+    if (blockedPatterns.some(pattern => pattern.test(hostname))) {
+      return { valid: false, error: 'Access to internal resources is not allowed.' }
+    }
+    
+    // Block common internal hostnames
+    const blockedHostnames = ['metadata', 'metadata.google.internal', 'instance-data']
+    if (blockedHostnames.includes(hostname)) {
+      return { valid: false, error: 'Access to internal resources is not allowed.' }
+    }
+    
+    return { valid: true }
+  } catch {
+    return { valid: false, error: 'Invalid URL format.' }
+  }
+}
+
+// Sanitize error messages for production
+function sanitizeError(message: string, isProduction: boolean): string {
+  if (!isProduction) return message
+  
+  // Common patterns that might leak internal info
+  const sensitivePatterns = [
+    /password/i, /secret/i, /key/i, /token/i,
+    /database/i, /postgres/i, /supabase/i,
+    /internal/i, /stack/i, /trace/i,
+  ]
+  
+  if (sensitivePatterns.some(p => p.test(message))) {
+    return 'An error occurred processing your request.'
+  }
+  return message.slice(0, 100) // Limit length
+}
+
 interface ValidateResult {
   isValid: boolean
   clientId?: string
@@ -224,6 +285,18 @@ Deno.serve(async (req) => {
       )
     }
 
+    // Validate URL format and block internal resources
+    const urlValidation = validateUrl(body.source_url)
+    if (!urlValidation.valid) {
+      const responseTime = Date.now() - startTime
+      await logApiUsage(supabase, authResult.clientId, 'ingest', req.method, 400, responseTime)
+      console.warn('URL validation failed:', body.source_url, urlValidation.error)
+      return new Response(
+        JSON.stringify({ error: urlValidation.error }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
     const platform = body.platform || detectPlatform(body.source_url)
 
     const { data: job, error: jobError } = await supabase
@@ -270,11 +343,11 @@ Deno.serve(async (req) => {
     )
   } catch (err) {
     const error = err as Error
-    console.error('Ingest error:', error)
+    console.error('Ingest error:', error.message, error.stack)
     const responseTime = Date.now() - startTime
     await logApiUsage(supabase, authResult.clientId, 'ingest', req.method, 500, responseTime)
     return new Response(
-      JSON.stringify({ error: 'Internal server error', details: error.message }),
+      JSON.stringify({ error: 'An error occurred processing your request.' }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
   }
