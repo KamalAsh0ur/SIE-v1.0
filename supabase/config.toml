@@ -11,3 +11,6 @@ verify_jwt = false
 
 [functions.events]
 verify_jwt = false
+
+[functions.sie-api]
+verify_jwt = false
