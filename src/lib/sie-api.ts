@@ -7,15 +7,40 @@ interface SIEApiResponse<T = unknown> {
 
 interface SIEApiError {
   error: string;
+  code?: string;
+  message?: string;
 }
 
 type SIEMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
+
+export class SIENotConfiguredError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'SIENotConfiguredError';
+  }
+}
 
 /**
  * SIE API Client - Frontend service to interact with the external SIE API
  * through the sie-api edge function.
  */
 export const sieApi = {
+  /**
+   * Check if SIE API is configured
+   */
+  async isConfigured(): Promise<boolean> {
+    try {
+      await this.request('/health', 'GET');
+      return true;
+    } catch (err) {
+      if (err instanceof SIENotConfiguredError) {
+        return false;
+      }
+      // Other errors might still mean it's configured but having issues
+      return true;
+    }
+  },
+
   /**
    * Make a request to the SIE API
    */
@@ -33,6 +58,10 @@ export const sieApi = {
     }
 
     if (data && 'error' in data) {
+      // Check for configuration error
+      if ('code' in data && data.code === 'SIE_NOT_CONFIGURED') {
+        throw new SIENotConfiguredError(data.message || 'SIE API not configured');
+      }
       throw new Error(data.error);
     }
 
