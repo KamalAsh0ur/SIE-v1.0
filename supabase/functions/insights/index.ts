@@ -103,9 +103,9 @@ Deno.serve(async (req) => {
     )
   } catch (err) {
     const error = err as Error
-    console.error('Insights error:', error)
+    console.error('Insights error:', error.message, error.stack)
     return new Response(
-      JSON.stringify({ error: 'Internal server error', details: error.message }),
+      JSON.stringify({ error: 'An error occurred processing your request.' }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
   }
