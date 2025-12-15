@@ -1,0 +1,49 @@
+# SIE Service and Ingress
+apiVersion: v1
+kind: Service
+metadata:
+  name: sie-api
+  namespace: sie
+  labels:
+    app.kubernetes.io/name: sie
+    app.kubernetes.io/component: api
+spec:
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: 8000
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: sie
+    app.kubernetes.io/component: api
+---
+# Ingress for external access
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: sie-ingress
+  namespace: sie
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/rate-limit: "100"
+    nginx.ingress.kubernetes.io/rate-limit-window: "1m"
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+spec:
+  tls:
+    - hosts:
+        - api.sie.example.com  # Replace with your domain
+      secretName: sie-tls
+  rules:
+    - host: api.sie.example.com  # Replace with your domain
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: sie-api
+                port:
+                  number: 80

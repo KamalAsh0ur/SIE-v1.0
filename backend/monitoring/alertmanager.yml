@@ -1,0 +1,100 @@
+# Alertmanager Configuration for SIE
+# Place in /etc/alertmanager/alertmanager.yml
+
+global:
+  resolve_timeout: 5m
+  
+  # SMTP for email notifications (optional)
+  # smtp_smarthost: 'smtp.example.com:587'
+  # smtp_from: 'alertmanager@sie.example.com'
+
+# Alert routing
+route:
+  group_by: ['alertname', 'severity']
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+  receiver: 'default-receiver'
+  
+  routes:
+    # P1 alerts go to PagerDuty immediately
+    - match:
+        severity: critical
+      receiver: 'pagerduty-critical'
+      group_wait: 10s
+      repeat_interval: 1h
+    
+    # P2 alerts go to Slack
+    - match:
+        severity: warning
+      receiver: 'slack-warnings'
+      group_wait: 1m
+      repeat_interval: 4h
+    
+    # Info alerts go to Slack (less urgent channel)
+    - match:
+        severity: info
+      receiver: 'slack-info'
+      group_wait: 5m
+      repeat_interval: 12h
+
+# Inhibition rules - prevent alert storms
+inhibit_rules:
+  # If service is down, don't send high latency alerts
+  - source_match:
+      alertname: 'SIEServiceDown'
+    target_match:
+      alertname: 'SIEHighAPILatency'
+    equal: ['job']
+  
+  # If queue is critical, don't send stagnation alerts
+  - source_match:
+      alertname: 'SIEQueueCritical'
+    target_match:
+      alertname: 'SIEQueueStagnation'
+    equal: ['queue']
+
+# Receivers
+receivers:
+  - name: 'default-receiver'
+    webhook_configs:
+      - url: 'http://localhost:9095/alerts'
+        send_resolved: true
+
+  - name: 'pagerduty-critical'
+    pagerduty_configs:
+      - routing_key: 'YOUR_PAGERDUTY_INTEGRATION_KEY'
+        severity: critical
+        description: '{{ .GroupLabels.alertname }}: {{ .CommonAnnotations.summary }}'
+        details:
+          alertname: '{{ .GroupLabels.alertname }}'
+          summary: '{{ .CommonAnnotations.summary }}'
+          description: '{{ .CommonAnnotations.description }}'
+          runbook: '{{ .CommonAnnotations.runbook_url }}'
+
+  - name: 'slack-warnings'
+    slack_configs:
+      - api_url: 'YOUR_SLACK_WEBHOOK_URL'
+        channel: '#sie-alerts'
+        username: 'SIE Alertmanager'
+        icon_emoji: ':warning:'
+        title: '{{ .GroupLabels.alertname }}'
+        text: |
+          *Summary:* {{ .CommonAnnotations.summary }}
+          *Description:* {{ .CommonAnnotations.description }}
+          *Runbook:* {{ .CommonAnnotations.runbook_url }}
+        send_resolved: true
+
+  - name: 'slack-info'
+    slack_configs:
+      - api_url: 'YOUR_SLACK_WEBHOOK_URL'
+        channel: '#sie-monitoring'
+        username: 'SIE Alertmanager'
+        icon_emoji: ':information_source:'
+        title: '{{ .GroupLabels.alertname }}'
+        text: '{{ .CommonAnnotations.summary }}'
+        send_resolved: true
+
+# Templates for notifications
+templates:
+  - '/etc/alertmanager/templates/*.tmpl'

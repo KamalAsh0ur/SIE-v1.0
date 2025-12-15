@@ -97,6 +97,16 @@ class Settings(BaseSettings):
     # Memory management
     job_ttl_hours: int = 24  # Hours to keep jobs in memory before cleanup
 
+    # Circuit Breaker Settings (SRE Plan §6.1)
+    cb_failure_threshold: int = 5     # Failures before opening circuit
+    cb_recovery_timeout: int = 60     # Seconds before half-open state
+    cb_enabled: bool = True           # Enable/disable circuit breakers
+
+    # Observability (SRE Plan §5.3)
+    tracing_enabled: bool = False     # Enable OpenTelemetry tracing
+    otel_exporter_endpoint: Optional[str] = None  # OTLP endpoint
+    metrics_enabled: bool = True      # Enable Prometheus metrics
+
     @model_validator(mode='after')
     def validate_production_secrets(self):
         """Validate that production doesn't use insecure default secrets."""

@@ -131,6 +131,25 @@ STORAGE_SIZE_BYTES = Gauge(
     ["storage_type"]  # hot, cold
 )
 
+# Circuit breaker metrics
+CIRCUIT_BREAKER_STATE = Gauge(
+    "sie_circuit_breaker_state",
+    "Circuit breaker state (0=closed, 1=half_open, 2=open)",
+    ["circuit"]
+)
+
+CIRCUIT_BREAKER_FAILURES = Counter(
+    "sie_circuit_breaker_failures_total",
+    "Total circuit breaker failure count",
+    ["circuit"]
+)
+
+CIRCUIT_BREAKER_REJECTIONS = Counter(
+    "sie_circuit_breaker_rejections_total",
+    "Total requests rejected by circuit breaker",
+    ["circuit"]
+)
+
 
 # ============================================================================
 # Helper Functions
@@ -190,6 +209,22 @@ def update_queue_length(queue: str, length: int):
 def update_dlq_length(length: int):
     """Update DLQ length gauge."""
     DLQ_LENGTH.set(length)
+
+
+def record_circuit_breaker_state(circuit: str, state: str):
+    """Update circuit breaker state gauge."""
+    state_map = {"closed": 0, "half_open": 1, "open": 2}
+    CIRCUIT_BREAKER_STATE.labels(circuit=circuit).set(state_map.get(state, 0))
+
+
+def record_circuit_breaker_failure(circuit: str):
+    """Record a circuit breaker failure."""
+    CIRCUIT_BREAKER_FAILURES.labels(circuit=circuit).inc()
+
+
+def record_circuit_breaker_rejection(circuit: str):
+    """Record a circuit breaker rejection."""
+    CIRCUIT_BREAKER_REJECTIONS.labels(circuit=circuit).inc()
 
 
 # ============================================================================

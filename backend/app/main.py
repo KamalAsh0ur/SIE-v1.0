@@ -47,6 +47,13 @@ async def lifespan(app: FastAPI):
             traces_sample_rate=0.1,
         )
     
+    # Initialize OpenTelemetry tracing
+    try:
+        from app.core.tracing import setup_tracing
+        setup_tracing(app)
+    except ImportError:
+        print("⚠ OpenTelemetry not available, tracing disabled")
+    
     yield
     
     # Shutdown

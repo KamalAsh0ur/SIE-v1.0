@@ -1,42 +1,34 @@
 {
     "annotations": {
-        "list": []
+        "list": [
+            {
+                "datasource": "prometheus",
+                "enable": true,
+                "expr": "ALERTS{alertstate=\"firing\"}",
+                "iconColor": "red",
+                "name": "Alerts",
+                "tagKeys": "alertname"
+            }
+        ]
     },
     "editable": true,
     "fiscalYearStartMonth": 0,
-    "graphTooltip": 0,
+    "graphTooltip": 1,
     "id": null,
     "links": [],
     "liveNow": false,
     "panels": [
         {
-            "datasource": {
-                "type": "prometheus",
-                "uid": "prometheus"
-            },
-            "fieldConfig": {
-                "defaults": {
-                    "color": {
-                        "mode": "palette-classic"
-                    },
-                    "unit": "short"
-                }
-            },
+            "collapsed": false,
             "gridPos": {
-                "h": 4,
-                "w": 6,
+                "h": 1,
+                "w": 24,
                 "x": 0,
                 "y": 0
             },
-            "id": 1,
-            "title": "Total Jobs Submitted",
-            "type": "stat",
-            "targets": [
-                {
-                    "expr": "sum(sie_jobs_submitted_total)",
-                    "legendFormat": "Jobs"
-                }
-            ]
+            "id": 100,
+            "title": "🎯 SLO Overview",
+            "type": "row"
         },
         {
             "datasource": {
@@ -46,58 +38,48 @@
             "fieldConfig": {
                 "defaults": {
                     "color": {
-                        "mode": "palette-classic"
+                        "mode": "thresholds"
                     },
-                    "unit": "short"
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                            {
+                                "color": "red",
+                                "value": null
+                            },
+                            {
+                                "color": "yellow",
+                                "value": 99
+                            },
+                            {
+                                "color": "green",
+                                "value": 99.9
+                            }
+                        ]
+                    },
+                    "unit": "percentunit",
+                    "min": 0.99,
+                    "max": 1
                 }
             },
             "gridPos": {
-                "h": 4,
+                "h": 6,
                 "w": 6,
-                "x": 6,
-                "y": 0
+                "x": 0,
+                "y": 1
             },
-            "id": 2,
-            "title": "Jobs In Progress",
-            "type": "stat",
+            "id": 101,
+            "title": "Availability SLO (99.9%)",
+            "type": "gauge",
             "targets": [
                 {
-                    "expr": "sie_jobs_in_progress",
-                    "legendFormat": "In Progress"
-                }
-            ]
-        },
-        {
-            "datasource": {
-                "type": "prometheus",
-                "uid": "prometheus"
-            },
-            "fieldConfig": {
-                "defaults": {
-                    "color": {
-                        "mode": "palette-classic"
-                    },
-                    "unit": "short"
-                }
-            },
-            "gridPos": {
-                "h": 4,
-                "w": 6,
-                "x": 12,
-                "y": 0
-            },
-            "id": 3,
-            "title": "DLQ Length",
-            "type": "stat",
-            "targets": [
-                {
-                    "expr": "sie_dlq_length",
-                    "legendFormat": "DLQ"
+                    "expr": "1 - (sum(rate(sie_http_requests_total{status=~\"5..\"}[24h])) / sum(rate(sie_http_requests_total[24h])))",
+                    "legendFormat": "Availability"
                 }
             ],
             "options": {
-                "colorMode": "value",
-                "graphMode": "area"
+                "showThresholdLabels": true,
+                "showThresholdMarkers": true
             }
         },
         {
@@ -108,20 +90,83 @@
             "fieldConfig": {
                 "defaults": {
                     "color": {
-                        "mode": "palette-classic"
+                        "mode": "thresholds"
+                    },
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                            {
+                                "color": "green",
+                                "value": null
+                            },
+                            {
+                                "color": "yellow",
+                                "value": 0.5
+                            },
+                            {
+                                "color": "red",
+                                "value": 2
+                            }
+                        ]
+                    },
+                    "unit": "s"
+                }
+            },
+            "gridPos": {
+                "h": 6,
+                "w": 6,
+                "x": 6,
+                "y": 1
+            },
+            "id": 102,
+            "title": "Latency P99 (SLO < 2s)",
+            "type": "gauge",
+            "targets": [
+                {
+                    "expr": "histogram_quantile(0.99, sum(rate(sie_http_request_duration_seconds_bucket[5m])) by (le))",
+                    "legendFormat": "P99"
+                }
+            ]
+        },
+        {
+            "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+            },
+            "fieldConfig": {
+                "defaults": {
+                    "color": {
+                        "mode": "thresholds"
+                    },
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                            {
+                                "color": "green",
+                                "value": null
+                            },
+                            {
+                                "color": "yellow",
+                                "value": 0.001
+                            },
+                            {
+                                "color": "red",
+                                "value": 0.01
+                            }
+                        ]
                     },
                     "unit": "percentunit"
                 }
             },
             "gridPos": {
-                "h": 4,
+                "h": 6,
                 "w": 6,
-                "x": 18,
-                "y": 0
+                "x": 12,
+                "y": 1
             },
-            "id": 4,
-            "title": "Error Rate",
-            "type": "stat",
+            "id": 103,
+            "title": "Error Rate (SLO < 0.1%)",
+            "type": "gauge",
             "targets": [
                 {
                     "expr": "sum(rate(sie_http_requests_total{status=~\"5..\"}[5m])) / sum(rate(sie_http_requests_total[5m]))",
@@ -134,11 +179,315 @@
                 "type": "prometheus",
                 "uid": "prometheus"
             },
+            "fieldConfig": {
+                "defaults": {
+                    "color": {
+                        "mode": "thresholds"
+                    },
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                            {
+                                "color": "green",
+                                "value": null
+                            },
+                            {
+                                "color": "yellow",
+                                "value": 100
+                            },
+                            {
+                                "color": "red",
+                                "value": 1000
+                            }
+                        ]
+                    },
+                    "unit": "short"
+                }
+            },
+            "gridPos": {
+                "h": 6,
+                "w": 6,
+                "x": 18,
+                "y": 1
+            },
+            "id": 104,
+            "title": "Queue Depth",
+            "type": "stat",
+            "targets": [
+                {
+                    "expr": "sum(sie_queue_length)",
+                    "legendFormat": "Queue"
+                }
+            ]
+        },
+        {
+            "collapsed": false,
+            "gridPos": {
+                "h": 1,
+                "w": 24,
+                "x": 0,
+                "y": 7
+            },
+            "id": 105,
+            "title": "🔒 Circuit Breakers",
+            "type": "row"
+        },
+        {
+            "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+            },
+            "fieldConfig": {
+                "defaults": {
+                    "color": {
+                        "mode": "thresholds"
+                    },
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                            {
+                                "color": "green",
+                                "value": null
+                            },
+                            {
+                                "color": "yellow",
+                                "value": 1
+                            },
+                            {
+                                "color": "red",
+                                "value": 2
+                            }
+                        ]
+                    },
+                    "mappings": [
+                        {
+                            "options": {
+                                "0": {
+                                    "text": "CLOSED"
+                                }
+                            },
+                            "type": "value"
+                        },
+                        {
+                            "options": {
+                                "1": {
+                                    "text": "HALF_OPEN"
+                                }
+                            },
+                            "type": "value"
+                        },
+                        {
+                            "options": {
+                                "2": {
+                                    "text": "OPEN"
+                                }
+                            },
+                            "type": "value"
+                        }
+                    ]
+                }
+            },
+            "gridPos": {
+                "h": 4,
+                "w": 6,
+                "x": 0,
+                "y": 8
+            },
+            "id": 106,
+            "title": "NLP Circuit",
+            "type": "stat",
+            "targets": [
+                {
+                    "expr": "sie_circuit_breaker_state{circuit=\"nlp_service\"}",
+                    "legendFormat": "State"
+                }
+            ]
+        },
+        {
+            "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+            },
+            "fieldConfig": {
+                "defaults": {
+                    "color": {
+                        "mode": "thresholds"
+                    },
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                            {
+                                "color": "green",
+                                "value": null
+                            },
+                            {
+                                "color": "yellow",
+                                "value": 1
+                            },
+                            {
+                                "color": "red",
+                                "value": 2
+                            }
+                        ]
+                    },
+                    "mappings": [
+                        {
+                            "options": {
+                                "0": {
+                                    "text": "CLOSED"
+                                }
+                            },
+                            "type": "value"
+                        },
+                        {
+                            "options": {
+                                "1": {
+                                    "text": "HALF_OPEN"
+                                }
+                            },
+                            "type": "value"
+                        },
+                        {
+                            "options": {
+                                "2": {
+                                    "text": "OPEN"
+                                }
+                            },
+                            "type": "value"
+                        }
+                    ]
+                }
+            },
+            "gridPos": {
+                "h": 4,
+                "w": 6,
+                "x": 6,
+                "y": 8
+            },
+            "id": 107,
+            "title": "OCR Circuit",
+            "type": "stat",
+            "targets": [
+                {
+                    "expr": "sie_circuit_breaker_state{circuit=\"ocr_service\"}",
+                    "legendFormat": "State"
+                }
+            ]
+        },
+        {
+            "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+            },
+            "fieldConfig": {
+                "defaults": {
+                    "color": {
+                        "mode": "thresholds"
+                    },
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                            {
+                                "color": "green",
+                                "value": null
+                            },
+                            {
+                                "color": "yellow",
+                                "value": 1
+                            },
+                            {
+                                "color": "red",
+                                "value": 2
+                            }
+                        ]
+                    },
+                    "mappings": [
+                        {
+                            "options": {
+                                "0": {
+                                    "text": "CLOSED"
+                                }
+                            },
+                            "type": "value"
+                        },
+                        {
+                            "options": {
+                                "1": {
+                                    "text": "HALF_OPEN"
+                                }
+                            },
+                            "type": "value"
+                        },
+                        {
+                            "options": {
+                                "2": {
+                                    "text": "OPEN"
+                                }
+                            },
+                            "type": "value"
+                        }
+                    ]
+                }
+            },
+            "gridPos": {
+                "h": 4,
+                "w": 6,
+                "x": 12,
+                "y": 8
+            },
+            "id": 108,
+            "title": "Scraper Circuit",
+            "type": "stat",
+            "targets": [
+                {
+                    "expr": "sie_circuit_breaker_state{circuit=\"scraper_service\"}",
+                    "legendFormat": "State"
+                }
+            ]
+        },
+        {
+            "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+            },
+            "gridPos": {
+                "h": 4,
+                "w": 6,
+                "x": 18,
+                "y": 8
+            },
+            "id": 109,
+            "title": "CB Rejections/min",
+            "type": "stat",
+            "targets": [
+                {
+                    "expr": "sum(rate(sie_circuit_breaker_rejections_total[1m])) * 60",
+                    "legendFormat": "Rejections"
+                }
+            ]
+        },
+        {
+            "collapsed": false,
+            "gridPos": {
+                "h": 1,
+                "w": 24,
+                "x": 0,
+                "y": 12
+            },
+            "id": 110,
+            "title": "📊 Request Metrics",
+            "type": "row"
+        },
+        {
+            "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+            },
             "gridPos": {
                 "h": 8,
                 "w": 12,
                 "x": 0,
-                "y": 4
+                "y": 13
             },
             "id": 5,
             "title": "Request Rate by Endpoint",
@@ -159,10 +508,10 @@
                 "h": 8,
                 "w": 12,
                 "x": 12,
-                "y": 4
+                "y": 13
             },
             "id": 6,
-            "title": "Request Duration (p95)",
+            "title": "Request Duration (p50, p95, p99)",
             "type": "timeseries",
             "fieldConfig": {
                 "defaults": {
@@ -171,58 +520,49 @@
             },
             "targets": [
                 {
-                    "expr": "histogram_quantile(0.95, sum by (endpoint, le) (rate(sie_http_request_duration_seconds_bucket[5m])))",
-                    "legendFormat": "{{endpoint}}"
-                }
-            ]
-        },
-        {
-            "datasource": {
-                "type": "prometheus",
-                "uid": "prometheus"
-            },
-            "gridPos": {
-                "h": 8,
-                "w": 8,
-                "x": 0,
-                "y": 12
-            },
-            "id": 7,
-            "title": "Job Duration Distribution",
-            "type": "histogram",
-            "targets": [
-                {
-                    "expr": "histogram_quantile(0.5, sum by (le) (rate(sie_job_duration_seconds_bucket[5m])))",
+                    "expr": "histogram_quantile(0.5, sum by (le) (rate(sie_http_request_duration_seconds_bucket[5m])))",
                     "legendFormat": "p50"
                 },
                 {
-                    "expr": "histogram_quantile(0.95, sum by (le) (rate(sie_job_duration_seconds_bucket[5m])))",
+                    "expr": "histogram_quantile(0.95, sum by (le) (rate(sie_http_request_duration_seconds_bucket[5m])))",
                     "legendFormat": "p95"
                 },
                 {
-                    "expr": "histogram_quantile(0.99, sum by (le) (rate(sie_job_duration_seconds_bucket[5m])))",
+                    "expr": "histogram_quantile(0.99, sum by (le) (rate(sie_http_request_duration_seconds_bucket[5m])))",
                     "legendFormat": "p99"
                 }
             ]
         },
         {
+            "collapsed": false,
+            "gridPos": {
+                "h": 1,
+                "w": 24,
+                "x": 0,
+                "y": 21
+            },
+            "id": 111,
+            "title": "⚙️ Worker Metrics",
+            "type": "row"
+        },
+        {
             "datasource": {
                 "type": "prometheus",
                 "uid": "prometheus"
             },
             "gridPos": {
-                "h": 8,
-                "w": 8,
-                "x": 8,
-                "y": 12
+                "h": 4,
+                "w": 4,
+                "x": 0,
+                "y": 22
             },
-            "id": 8,
-            "title": "NLP Processing",
-            "type": "timeseries",
+            "id": 1,
+            "title": "Jobs Submitted",
+            "type": "stat",
             "targets": [
                 {
-                    "expr": "sum by (sentiment) (rate(sie_nlp_processed_total[5m]))",
-                    "legendFormat": "{{sentiment}}"
+                    "expr": "sum(sie_jobs_submitted_total)",
+                    "legendFormat": "Total"
                 }
             ]
         },
@@ -232,23 +572,58 @@
                 "uid": "prometheus"
             },
             "gridPos": {
-                "h": 8,
-                "w": 8,
-                "x": 16,
-                "y": 12
+                "h": 4,
+                "w": 4,
+                "x": 4,
+                "y": 22
             },
-            "id": 9,
-            "title": "OCR Performance",
-            "type": "timeseries",
+            "id": 2,
+            "title": "In Progress",
+            "type": "stat",
+            "targets": [
+                {
+                    "expr": "sie_jobs_in_progress",
+                    "legendFormat": "Active"
+                }
+            ]
+        },
+        {
+            "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+            },
+            "gridPos": {
+                "h": 4,
+                "w": 4,
+                "x": 8,
+                "y": 22
+            },
+            "id": 3,
+            "title": "DLQ Length",
+            "type": "stat",
             "fieldConfig": {
                 "defaults": {
-                    "unit": "s"
+                    "thresholds": {
+                        "steps": [
+                            {
+                                "color": "green"
+                            },
+                            {
+                                "color": "yellow",
+                                "value": 50
+                            },
+                            {
+                                "color": "red",
+                                "value": 100
+                            }
+                        ]
+                    }
                 }
             },
             "targets": [
                 {
-                    "expr": "histogram_quantile(0.95, sum by (le) (rate(sie_ocr_duration_seconds_bucket[5m])))",
-                    "legendFormat": "p95 Duration"
+                    "expr": "sie_dlq_length",
+                    "legendFormat": "DLQ"
                 }
             ]
         },
@@ -258,13 +633,13 @@
                 "uid": "prometheus"
             },
             "gridPos": {
-                "h": 6,
+                "h": 4,
                 "w": 12,
-                "x": 0,
-                "y": 20
+                "x": 12,
+                "y": 22
             },
             "id": 10,
-            "title": "Queue Length",
+            "title": "Queue Lengths by Type",
             "type": "timeseries",
             "targets": [
                 {
@@ -281,16 +656,46 @@
             "gridPos": {
                 "h": 6,
                 "w": 12,
-                "x": 12,
-                "y": 20
+                "x": 0,
+                "y": 26
             },
-            "id": 11,
-            "title": "Scraper Requests",
+            "id": 7,
+            "title": "Job Duration Distribution",
+            "type": "timeseries",
+            "fieldConfig": {
+                "defaults": {
+                    "unit": "s"
+                }
+            },
+            "targets": [
+                {
+                    "expr": "histogram_quantile(0.5, sum by (le) (rate(sie_job_duration_seconds_bucket[5m])))",
+                    "legendFormat": "p50"
+                },
+                {
+                    "expr": "histogram_quantile(0.95, sum by (le) (rate(sie_job_duration_seconds_bucket[5m])))",
+                    "legendFormat": "p95"
+                }
+            ]
+        },
+        {
+            "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+            },
+            "gridPos": {
+                "h": 6,
+                "w": 12,
+                "x": 12,
+                "y": 26
+            },
+            "id": 8,
+            "title": "NLP by Sentiment",
             "type": "timeseries",
             "targets": [
                 {
-                    "expr": "sum by (platform, status) (rate(sie_scraper_requests_total[5m]))",
-                    "legendFormat": "{{platform}} - {{status}}"
+                    "expr": "sum by (sentiment) (rate(sie_nlp_processed_total[5m]))",
+                    "legendFormat": "{{sentiment}}"
                 }
             ]
         }
@@ -301,7 +706,8 @@
     "tags": [
         "sie",
         "backend",
-        "ingestion"
+        "slo",
+        "sre"
     ],
     "templating": {
         "list": []
@@ -312,8 +718,8 @@
     },
     "timepicker": {},
     "timezone": "browser",
-    "title": "SIE Backend Dashboard",
-    "uid": "sie-backend",
-    "version": 1,
+    "title": "SIE Backend Dashboard (SRE)",
+    "uid": "sie-backend-sre",
+    "version": 2,
     "weekStart": ""
 }

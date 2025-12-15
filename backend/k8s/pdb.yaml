@@ -1,0 +1,46 @@
+# PodDisruptionBudget for SIE
+# Ensures minimum availability during voluntary disruptions
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: sie-api-pdb
+  namespace: sie
+  labels:
+    app.kubernetes.io/name: sie
+    app.kubernetes.io/component: api
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: sie
+      app.kubernetes.io/component: api
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: sie-worker-ingestion-pdb
+  namespace: sie
+  labels:
+    app.kubernetes.io/name: sie
+    app.kubernetes.io/component: worker-ingestion
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: sie
+      app.kubernetes.io/component: worker-ingestion
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: sie-worker-nlp-pdb
+  namespace: sie
+  labels:
+    app.kubernetes.io/name: sie
+    app.kubernetes.io/component: worker-nlp
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: sie
+      app.kubernetes.io/component: worker-nlp

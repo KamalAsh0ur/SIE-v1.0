@@ -1,0 +1,269 @@
+# SIE Backend Kubernetes Deployment
+# Includes API server and Celery workers with proper health probes
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sie-api
+  namespace: sie
+  labels:
+    app.kubernetes.io/name: sie
+    app.kubernetes.io/component: api
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: sie
+      app.kubernetes.io/component: api
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: sie
+        app.kubernetes.io/component: api
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8000"
+        prometheus.io/path: "/metrics"
+    spec:
+      containers:
+        - name: api
+          image: sie-backend:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8000
+              name: http
+              protocol: TCP
+          env:
+            - name: ENVIRONMENT
+              value: production
+            - name: DEBUG
+              value: "false"
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: sie-secrets
+                  key: database-url
+            - name: REDIS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: sie-secrets
+                  key: redis-url
+            - name: API_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: sie-secrets
+                  key: api-secret-key
+            - name: MEILISEARCH_URL
+              value: "http://meilisearch:7700"
+            - name: TRACING_ENABLED
+              value: "true"
+            - name: OTEL_EXPORTER_ENDPOINT
+              value: "http://otel-collector:4317"
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "250m"
+            limits:
+              memory: "1Gi"
+              cpu: "1000m"
+          # Liveness probe - restart if unhealthy
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          # Readiness probe - remove from load balancer if not ready
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 8000
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+          # Startup probe - for slow-starting containers
+          startupProbe:
+            httpGet:
+              path: /startup
+              port: 8000
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            failureThreshold: 30
+      terminationGracePeriodSeconds: 30
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/name: sie
+                    app.kubernetes.io/component: api
+                topologyKey: kubernetes.io/hostname
+---
+# Ingestion Workers (high concurrency, I/O bound)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sie-worker-ingestion
+  namespace: sie
+  labels:
+    app.kubernetes.io/name: sie
+    app.kubernetes.io/component: worker-ingestion
+spec:
+  replicas: 4
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: sie
+      app.kubernetes.io/component: worker-ingestion
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: sie
+        app.kubernetes.io/component: worker-ingestion
+    spec:
+      containers:
+        - name: worker
+          image: sie-backend:latest
+          imagePullPolicy: Always
+          command: ["celery"]
+          args: ["-A", "app.workers.celery_app", "worker", "-Q", "ingestion", "--concurrency=8", "--autoscale=16,2", "-n", "ingestion@%h"]
+          env:
+            - name: ENVIRONMENT
+              value: production
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: sie-secrets
+                  key: database-url
+            - name: REDIS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: sie-secrets
+                  key: redis-url
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "250m"
+            limits:
+              memory: "1Gi"
+              cpu: "1000m"
+          livenessProbe:
+            exec:
+              command:
+                - celery
+                - -A
+                - app.workers.celery_app
+                - inspect
+                - ping
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 10
+      terminationGracePeriodSeconds: 60
+---
+# NLP Workers (CPU intensive, fewer but more powerful)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sie-worker-nlp
+  namespace: sie
+  labels:
+    app.kubernetes.io/name: sie
+    app.kubernetes.io/component: worker-nlp
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: sie
+      app.kubernetes.io/component: worker-nlp
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: sie
+        app.kubernetes.io/component: worker-nlp
+    spec:
+      containers:
+        - name: worker
+          image: sie-backend:latest
+          imagePullPolicy: Always
+          command: ["celery"]
+          args: ["-A", "app.workers.celery_app", "worker", "-Q", "nlp", "--concurrency=4", "-n", "nlp@%h"]
+          env:
+            - name: ENVIRONMENT
+              value: production
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: sie-secrets
+                  key: database-url
+            - name: REDIS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: sie-secrets
+                  key: redis-url
+          resources:
+            requests:
+              memory: "1Gi"
+              cpu: "500m"
+            limits:
+              memory: "2Gi"
+              cpu: "2000m"
+      terminationGracePeriodSeconds: 60
+---
+# OCR Workers (memory intensive)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sie-worker-ocr
+  namespace: sie
+  labels:
+    app.kubernetes.io/name: sie
+    app.kubernetes.io/component: worker-ocr
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: sie
+      app.kubernetes.io/component: worker-ocr
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: sie
+        app.kubernetes.io/component: worker-ocr
+    spec:
+      containers:
+        - name: worker
+          image: sie-backend:latest
+          imagePullPolicy: Always
+          command: ["celery"]
+          args: ["-A", "app.workers.celery_app", "worker", "-Q", "ocr", "--concurrency=2", "-n", "ocr@%h"]
+          env:
+            - name: ENVIRONMENT
+              value: production
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: sie-secrets
+                  key: database-url
+            - name: REDIS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: sie-secrets
+                  key: redis-url
+            - name: OCR_PREPROCESS
+              value: "true"
+          resources:
+            requests:
+              memory: "1Gi"
+              cpu: "500m"
+            limits:
+              memory: "2Gi"
+              cpu: "2000m"
+      terminationGracePeriodSeconds: 60
